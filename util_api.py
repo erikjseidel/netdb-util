@@ -1,7 +1,6 @@
 from flask import Flask, Response, request, json
 
 import importlib
-from modules.__modules__ import MODULES
 
 app = Flask(__name__)
 
