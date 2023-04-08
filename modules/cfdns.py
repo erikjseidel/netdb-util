@@ -25,8 +25,13 @@ def _get_ptrs():
         return False, None, comment
 
     dns =   { 
-                k[0].split('/')[0]:
-                    k[1]['meta']['dns']['ptr'] if 'ptr' in k[1]['meta']['dns'] else None 
+                ip_address(k[0].split('/')[0]).reverse_pointer:
+                {
+                    'ptr': k[1]['meta']['dns']['ptr'] if 'ptr' in k[1]['meta']['dns'] else None,
+                    'ip' : k[0].split('/')[0],
+                }
+               # k[0].split('/')[0]:
+               #     k[1]['meta']['dns']['ptr'] if 'ptr' in k[1]['meta']['dns'] else None 
                 for i in data 
                 for j in data[i]['interfaces']
                 for k in data[i]['interfaces'][j]['address'].items()
@@ -100,23 +105,23 @@ def _gen_cf_managed(ptrs):
     cf_managed = deepcopy(_CF_MANAGED)
 
     out = {}
-    
-    for ip, ptr in ptrs.items():
+    for name, meta  in ptrs.items():
+        ip   = meta['ip']
+        ptr  = meta['ptr']
         addr = ip_address(ip)
         cidr = str(addr.max_prefixlen)
-        name = addr.reverse_pointer
 
         for k, v in cf_managed.items():
             if 'ptrs' not in v:
                 v['ptrs'] = {}
 
-            # Load list of existing CFLARE records if not already done
+            # Load list of existing CF records if not already done
             if 'cfptrs' not in v:
                 v['cfptrs'] = _pull_cf_managed(_CF_MANAGED[k])
                 for ck, cv in v['cfptrs'].items():
 
                     # If a CF record does not exist in netdb then delete it
-                    if ck not in ptrs:
+                    if ck not in ptrs.keys():
                         out.update({ ck : {
                                 "ptr"       :  cv['ptr'], 
                                 "cf_id"     :  cv['id'],
@@ -131,24 +136,30 @@ def _gen_cf_managed(ptrs):
                     if name not in v['cfptrs']:
                         action = 'create'
                         cf_id = None
+                        update = True
 
                     # record exists but content has changed
                     elif ptr != v['cfptrs'][name]['ptr']:
                         action = 'update'
                         cf_id = v['cfptrs'][name]['id']
+                        update = True
 
-                    # record exists and up-to-date. no action needed.
+                    # record exists and up-to-date. no action needed
                     else:
-                        action = 'pass'
-                        cf_id = v['cfptrs'][name]['id']
-                    out.update({ name : {
+                        update = False
+
+                    # add the ptr to the list of managed records w/ required action
+                    if update:
+                        out.update({ name : {
                             "ptr"      :  ptr, 
                             "action"   :  action,
-                            "cf_id"   :  cf_id,
+                            "cf_id"    :  cf_id,
                             "account"  :  _CF_MANAGED[k]['account'],
                             "zone"     :  _CF_MANAGED[k]['zone'],
                             }
                         })
+
+                    # PTR only in one zone. No need to continue iterating
                     break
             except TypeError:
                 pass
@@ -158,7 +169,12 @@ def _gen_cf_managed(ptrs):
 
 def _update_cf_records(cf_managed):
     for name, content in cf_managed.items():
-        if content['action'] == 'create':
+        if content['action'] == 'pass':
+            result  = True 
+            out     = None 
+            comment = 'no action'
+
+        elif content['action'] == 'create':
             result, out, comment = _cf_create(name, content['ptr'], content['zone'])
 
         elif content['action'] == 'update':
@@ -166,11 +182,6 @@ def _update_cf_records(cf_managed):
 
         elif content['action'] == 'delete':
             result, out, comment = _cf_delete(name, content['ptr'], content['zone'], content['cf_id'])
-
-        elif content['action'] == 'pass':
-            result  = True 
-            out     = None 
-            comment = 'no action'
 
         # We should never reach this point
         else:
@@ -207,6 +218,8 @@ def update_cf(method, data):
         return result, data, comment
 
     cf_managed = _gen_cf_managed(data)
+    if not cf_managed:
+        return False, None, 'All CF managed records up to date.'
 
     if method == 'POST':
         result, out, comment = _update_cf_records(cf_managed)
