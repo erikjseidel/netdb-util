@@ -22,11 +22,11 @@ def get_ptrs(method, data):
         return False, None, comment
 
     dns =   { 
-                k[0].split('/')[0]: k[1]['meta']['dns']['ptr'] 
-                    if 'ptr' in k[1]['meta']['dns'] else None 
+                k[0].split('/')[0]:
+                    k[1]['meta']['dns']['ptr'] if 'ptr' in k[1]['meta']['dns'] else None 
                 for i in data 
                 for j in data[i]['interfaces']
                 for k in data[i]['interfaces'][j]['address'].items()
             }
             
-    return True, dns, 'Test'
+    return True, dns, 'netdb managed PTR records'
