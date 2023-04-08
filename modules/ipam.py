@@ -5,6 +5,7 @@ from ipaddress  import ip_interface, ip_network
 
 from util.decorators import restful_method
 from util.netdb      import netdb_get
+from util.query      import ADDR_PROJECT
 
 _NETDB_COLUMN = 'interface'
 
@@ -18,15 +19,12 @@ def report(method, data):
 
     :param data['device']: Limit report to only the specified device (optional)
     """
+    project = deepcopy(ADDR_PROJECT)
 
     if data and 'device' in data:
-        device = data['device']
-    else:
-        device = None
-        
-    filt = [ device.upper() if device else None, None, None, None ]
+        project['filter'].update({ 'set_id': str(data['device']).upper() })
 
-    result, data, comment = netdb_get(_NETDB_COLUMN, filt)
+    result, data, comment = netdb_get(_NETDB_COLUMN, project, project=True)
 
     if not result:
         return result, None, comment
@@ -91,7 +89,7 @@ def chooser(method, data):
     except:
         return False, None, 'Invalid prefix'
 
-    result, data, comment = netdb_get(_NETDB_COLUMN, None)
+    result, data, comment = netdb_get(_NETDB_COLUMN, ADDR_PROJECT, project=True)
 
     if not result or not data:
         return result, data, comment

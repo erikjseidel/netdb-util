@@ -10,8 +10,11 @@ HEADERS = {
         }
 
 @netdb_consumer
-def netdb_get(column, data=None):
+def netdb_get(column, data=None, project=False):
     url = NETDB_URL + column
+
+    if project:
+        url += '/project'
 
     if data:
         return requests.get(url, data = json.dumps(data), headers = HEADERS )
