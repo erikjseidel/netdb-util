@@ -25,13 +25,10 @@ def _get_ptrs():
         return False, None, comment
 
     dns =   { 
-                ip_address(k[0].split('/')[0]).reverse_pointer:
-                {
+                ip_address(k[0].split('/')[0]).reverse_pointer: {
                     'ptr': k[1]['meta']['dns']['ptr'] if 'ptr' in k[1]['meta']['dns'] else None,
                     'ip' : k[0].split('/')[0],
-                }
-               # k[0].split('/')[0]:
-               #     k[1]['meta']['dns']['ptr'] if 'ptr' in k[1]['meta']['dns'] else None 
+                    }
                 for i in data 
                 for j in data[i]['interfaces']
                 for k in data[i]['interfaces'][j]['address'].items()
