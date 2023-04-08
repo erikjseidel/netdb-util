@@ -2,8 +2,6 @@ from copy       import deepcopy
 from ipaddress  import ip_address, ip_network
 import requests, json
 
-from pprint import pprint
-
 from util.decorators import restful_method
 from util.netdb      import netdb_get
 from util.query      import DNS_PROJECT
