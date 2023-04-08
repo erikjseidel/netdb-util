@@ -214,4 +214,4 @@ def update_cf(method, data):
         result, out, comment = _update_cf_records(cf_managed)
         return result, cf_managed, comment
     else:
-        return True, cf_managed, 'CF update list'
+        return True, cf_managed, 'Dry Run: CF update list'
