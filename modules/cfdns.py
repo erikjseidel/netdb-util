@@ -169,12 +169,7 @@ def _gen_cf_managed(ptrs):
 
 def _update_cf_records(cf_managed):
     for name, content in cf_managed.items():
-        if content['action'] == 'pass':
-            result  = True 
-            out     = None 
-            comment = 'no action'
-
-        elif content['action'] == 'create':
+        if content['action'] == 'create':
             result, out, comment = _cf_create(name, content['ptr'], content['zone'])
 
         elif content['action'] == 'update':
