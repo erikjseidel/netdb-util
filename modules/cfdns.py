@@ -10,13 +10,31 @@ from util.private    import CF_TOKEN, CF_ZONES
 _NETDB_COLUMN = 'interface'
 
 _CF_MANAGED = {
-        "23.181.64.0/24": CF_ZONES['64.181.23.in-addr.arpa'],
+        "23.181.64.0/24"     : CF_ZONES['64.181.23.in-addr.arpa'],
+        "2620:136:a009::/48" : CF_ZONES['9.0.0.a.6.3.1.0.0.2.6.2.ip6.arpa'],
         }
 
 _CF_HEADERS = {
         'Content-Type'  : 'application/json',
         'Authorization' : 'Bearer ' + CF_TOKEN,
         }
+
+_CF_API_PER_PAGE=1000
+
+class CloudflareException(Exception):
+    """Exception raised for non-200 returns in CF API calls
+
+    Attributes:
+        url     -- CF API url
+        message -- explanation of the error
+    """
+
+    def __init__(self, url, data, message):
+        self.url     = url
+        self.data    = data
+        self.message = message
+        super().__init__(self.message)
+
 
 def _get_ptrs():
     result, data, comment = netdb_get(_NETDB_COLUMN, DNS_PROJECT, project=True)
@@ -38,15 +56,24 @@ def _get_ptrs():
 
 
 def _pull_cf_managed(zone):
-    url = 'https://api.cloudflare.com/client/v4/zones/%s/dns_records' % zone['zone']
+    # Hard coded a thousand records per page. Should be enough for PTR zones.
+    # may want to replace this a loop walk.
+    url = 'https://api.cloudflare.com/client/v4/zones/%s/dns_records?per_page=%s' % (zone, _CF_API_PER_PAGE)
 
-    resp = requests.get(url, headers = _CF_HEADERS).json()
+    resp = requests.get(url, headers = _CF_HEADERS)
+
+    if resp.status_code != 200:
+        raise CloudflareException(url, None, "_pull_cf_managed returned " + str(resp.status_code))
+
+    ret = resp.json()
 
     cflare = {}
-    for result in resp['result']: 
+    for result in ret['result']: 
         cflare.update({ result['name'] : {
-            "ptr" :  result['content'],
-            "id"  :  result['id'],
+            "ptr"     :  result['content'],
+            "ttl"     :  result['ttl'],
+            "comment" :  result['comment'],
+            "id"      :  result['id'],
             }
         })
             
@@ -64,9 +91,12 @@ def _cf_create(name, content, zone):
             "comment" : "salt / netdb managed",
             }
 
-    resp = requests.post(url, headers = _CF_HEADERS, data = json.dumps(data)).json()
+    resp = requests.post(url, headers = _CF_HEADERS, data = json.dumps(data))
 
-    return resp['success'], resp, "cloudflare answer"
+    if resp.status_code != 200:
+        raise CloudflareException(url, data, "_cf_create returned " + str(resp.status_code))
+
+    return resp.json()
 
 
 def _cf_update(name, content, zone, cf_id):
@@ -80,9 +110,12 @@ def _cf_update(name, content, zone, cf_id):
             "comment" : "salt / netdb managed",
             }
 
-    resp = requests.put(url, headers = _CF_HEADERS, data = json.dumps(data)).json()
+    resp = requests.put(url, headers = _CF_HEADERS, data = json.dumps(data))
 
-    return resp['success'], resp, "cloudflare answer"
+    if resp.status_code != 200:
+        raise CloudflareException(url, data, "_cf_update returned " + str(resp.status_code))
+
+    return resp.json()
 
 
 def _cf_delete(name, content, zone, cf_id):
@@ -90,12 +123,10 @@ def _cf_delete(name, content, zone, cf_id):
 
     resp = requests.delete(url, headers = _CF_HEADERS)
 
-    if resp.status_code == 200:
-        result = True
-    else:
-        result = False
+    if resp.status_code != 200:
+        raise CloudflareException(url, None, "_cf_delete returned " + str(resp.status_code))
 
-    return result, resp.json(), "cloudflare answer"
+    return resp.json()
 
 
 def _gen_cf_managed(ptrs):
@@ -109,12 +140,9 @@ def _gen_cf_managed(ptrs):
         cidr = str(addr.max_prefixlen)
 
         for k, v in cf_managed.items():
-            if 'ptrs' not in v:
-                v['ptrs'] = {}
-
             # Load list of existing CF records if not already done
             if 'cfptrs' not in v:
-                v['cfptrs'] = _pull_cf_managed(_CF_MANAGED[k])
+                v['cfptrs'] = _pull_cf_managed(_CF_MANAGED[k]['zone'])
                 for ck, cv in v['cfptrs'].items():
 
                     # If a CF record does not exist in netdb then delete it
@@ -167,24 +195,13 @@ def _gen_cf_managed(ptrs):
 def _update_cf_records(cf_managed):
     for name, content in cf_managed.items():
         if content['action'] == 'create':
-            result, out, comment = _cf_create(name, content['ptr'], content['zone'])
+            _cf_create(name, content['ptr'], content['zone'])
 
         elif content['action'] == 'update':
-            result, out, comment = _cf_update(name, content['ptr'], content['zone'], content['cf_id'])
+            _cf_update(name, content['ptr'], content['zone'], content['cf_id'])
 
         elif content['action'] == 'delete':
-            result, out, comment = _cf_delete(name, content['ptr'], content['zone'], content['cf_id'])
-
-        # We should never reach this point
-        else:
-            result  = False 
-            out     = None
-            comment = 'invalid dns record action'
-
-        if not result:
-            return result, out, comment
-
-    return True, None, 'CF update complete'
+            _cf_delete(name, content['ptr'], content['zone'], content['cf_id'])
 
 
 @restful_method
@@ -199,7 +216,12 @@ def get_ptrs(method, data):
 
 @restful_method
 def get_cf(method, data):
-    return True, _CF_MANAGED, 'CF managed PTR Zones'
+    cf_managed = deepcopy(_CF_MANAGED)
+
+    for zone, zone_data in cf_managed.items():
+        zone_data['ptrs'] = _pull_cf_managed(_CF_MANAGED[zone]['zone'])
+
+    return True, cf_managed, 'CF managed PTR Zones'
 
 
 @restful_method(methods = ['GET', 'POST'])
@@ -209,12 +231,22 @@ def update_cf(method, data):
     if not result:
         return result, data, comment
 
-    cf_managed = _gen_cf_managed(data)
-    if not cf_managed:
-        return False, None, 'All CF managed records up to date.'
+    success = True
+    try:
+        cf_managed = _gen_cf_managed(data)
+        if not cf_managed:
+            success = False
+            comment = 'All CF managed records up to date.'
 
-    if method == 'POST':
-        result, out, comment = _update_cf_records(cf_managed)
-        return result, cf_managed, comment
-    else:
-        return True, cf_managed, 'Dry Run: CF update list'
+        elif method == 'POST':
+            _update_cf_records(cf_managed)
+            comment = 'CF update complete'
+        else:
+            comment = 'Dry Run: CF update list'
+
+    except CloudflareException as e:
+        success    = False
+        cf_managed = { 'url': e.url, 'data': e.data }
+        comment    = e.message
+
+    return success, cf_managed, comment
