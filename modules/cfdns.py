@@ -12,6 +12,7 @@ _NETDB_COLUMN = 'interface'
 _CF_MANAGED = {
         "23.181.64.0/24"     : CF_ZONES['64.181.23.in-addr.arpa'],
         "2620:136:a009::/48" : CF_ZONES['9.0.0.a.6.3.1.0.0.2.6.2.ip6.arpa'],
+        "170.39.66.0/24"     : CF_ZONES['66.39.170.in-addr.arpa'],
         }
 
 _CF_HEADERS = {
@@ -42,9 +43,15 @@ def _get_ptrs():
     if not result:
         return False, None, comment
 
+    def gen_ptr(record):
+        try:
+            return record['meta']['dns']['ptr']
+        except KeyError:
+            return None
+
     dns =   { 
                 ip_address(k[0].split('/')[0]).reverse_pointer: {
-                    'ptr': k[1]['meta']['dns']['ptr'] if 'ptr' in k[1]['meta']['dns'] else None,
+                    'ptr': gen_ptr(k[1]),
                     'ip' : k[0].split('/')[0],
                     }
                 for i in data 
@@ -146,7 +153,7 @@ def _gen_cf_managed(ptrs):
                 for ck, cv in v['cfptrs'].items():
 
                     # If a CF record does not exist in netdb then delete it
-                    if ck not in ptrs.keys():
+                    if _CF_MANAGED[k]['managed'] and ck not in ptrs.keys():
                         out.update({ ck : {
                                 "ptr"       :  cv['ptr'], 
                                 "cf_id"     :  cv['id'],
@@ -174,7 +181,7 @@ def _gen_cf_managed(ptrs):
                         update = False
 
                     # add the ptr to the list of managed records w/ required action
-                    if update:
+                    if update and ptr:
                         out.update({ name : {
                             "ptr"      :  ptr, 
                             "action"   :  action,
@@ -236,13 +243,13 @@ def update_cf(method, data):
         cf_managed = _gen_cf_managed(data)
         if not cf_managed:
             success = False
-            comment = 'All CF managed records up to date.'
+            comment = 'All netdb managed zones and records up to date.'
 
         elif method == 'POST':
             _update_cf_records(cf_managed)
-            comment = 'CF update complete'
+            comment = 'Update of netdb managed zones and records complete'
         else:
-            comment = 'Dry Run: CF update list'
+            comment = 'List of netdb records to requiring synchronisation'
 
     except CloudflareException as e:
         success    = False
