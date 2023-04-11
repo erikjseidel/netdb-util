@@ -43,7 +43,7 @@ def _get_ptrs():
     if not result:
         return False, None, comment
 
-    def gen_ptr(record):
+    def pull_ptr(record):
         try:
             return record['meta']['dns']['ptr']
         except KeyError:
@@ -51,9 +51,10 @@ def _get_ptrs():
 
     dns =   { 
                 ip_address(k[0].split('/')[0]).reverse_pointer: {
-                    'ptr': gen_ptr(k[1]),
+                    'ptr': pull_ptr(k[1]),
                     'ip' : k[0].split('/')[0],
                     }
+
                 for i in data 
                 for j in data[i]['interfaces']
                 for k in data[i]['interfaces'][j]['address'].items()
@@ -72,20 +73,17 @@ def _pull_cf_managed(zone):
     if resp.status_code != 200:
         raise CloudflareException(url, None, "_pull_cf_managed returned " + str(resp.status_code))
 
-    ret = resp.json()
+    return  {
+                result['name'] : {
+                    "ptr"     :  result['content'],
+                    "ttl"     :  result['ttl'],
+                    "comment" :  result['comment'],
+                    "id"      :  result['id'],
+                    }
 
-    cflare = {}
-    for result in ret['result']: 
-        cflare.update({ result['name'] : {
-            "ptr"     :  result['content'],
-            "ttl"     :  result['ttl'],
-            "comment" :  result['comment'],
-            "id"      :  result['id'],
+                for result in resp.json()['result']
             }
-        })
             
-    return cflare
-
 
 def _cf_create(name, content, zone):
     url = 'https://api.cloudflare.com/client/v4/zones/%s/dns_records' % zone
@@ -150,8 +148,8 @@ def _gen_cf_managed(ptrs):
             # Load list of existing CF records if not already done
             if 'cfptrs' not in v:
                 v['cfptrs'] = _pull_cf_managed(_CF_MANAGED[k]['zone'])
-                for ck, cv in v['cfptrs'].items():
 
+                for ck, cv in v['cfptrs'].items():
                     # If a CF record does not exist in netdb then delete it
                     if _CF_MANAGED[k]['managed'] and ck not in ptrs.keys():
                         out.update({ ck : {
@@ -162,6 +160,7 @@ def _gen_cf_managed(ptrs):
                                 "zone"      :  _CF_MANAGED[k]['zone'],
                                 }
                             })
+
             try:
                 if ip_network(ip + '/' + cidr).subnet_of(ip_network(k)):
                     # new record in CF
@@ -193,6 +192,7 @@ def _gen_cf_managed(ptrs):
 
                     # PTR only in one zone. No need to continue iterating
                     break
+
             except TypeError:
                 pass
 
