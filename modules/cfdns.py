@@ -50,14 +50,14 @@ def _get_ptrs():
             return None
 
     dns =   { 
-                ip_address(k[0].split('/')[0]).reverse_pointer: {
-                    'ptr': pull_ptr(k[1]),
-                    'ip' : k[0].split('/')[0],
+                ip_address(k.split('/')[0]).reverse_pointer: {
+                    'ptr': pull_ptr(v),
+                    'ip' : k.split('/')[0],
                     }
 
                 for i in data 
                 for j in data[i]['interfaces']
-                for k in data[i]['interfaces'][j]['address'].items()
+                for k, v in data[i]['interfaces'][j]['address'].items()
             }
             
     return True, dns, 'netdb managed PTR records'
