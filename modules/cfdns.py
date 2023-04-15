@@ -5,22 +5,12 @@ import requests, json
 from util.decorators import restful_method
 from util.netdb      import netdb_get
 from util.query      import DNS_PROJECT
-from util.private    import CF_TOKEN, CF_ZONES
+from util.utildb_api import utilDB
 
 _NETDB_COLUMN = 'interface'
 
-_CF_MANAGED = {
-        "23.181.64.0/24"     : CF_ZONES['64.181.23.in-addr.arpa'],
-        "2620:136:a009::/48" : CF_ZONES['9.0.0.a.6.3.1.0.0.2.6.2.ip6.arpa'],
-        "170.39.66.0/24"     : CF_ZONES['66.39.170.in-addr.arpa'],
-        }
+_UTIL_COLLECTION = 'managed_dns'
 
-_CF_HEADERS = {
-        'Content-Type'  : 'application/json',
-        'Authorization' : 'Bearer ' + CF_TOKEN,
-        }
-
-_CF_API_PER_PAGE=1000
 
 class CloudflareException(Exception):
     """Exception raised for non-200 returns in CF API calls
@@ -37,6 +27,47 @@ class CloudflareException(Exception):
         super().__init__(self.message)
 
 
+def _get_cfzones():
+    filt = { "type": "managed_zone", "provider": "cloudflare" }
+    result, out, comment = utilDB(_UTIL_COLLECTION).read(filt)
+
+    if not result:
+        return None
+
+    return  {
+                item['prefix'] : {
+                    "account" : item['account'],
+                    "zone"    : item['zone'],
+                    "managed" : item['managed'],
+                }
+
+                for item in out
+            }
+
+
+def _get_cftoken():
+    filt = { "type": "token", "provider": "cloudflare" }
+    result, out, comment = utilDB(_UTIL_COLLECTION).read(filt)
+
+    if not result:
+        return None
+
+    return out[0]['token']
+
+
+def _init_cf():
+    global _CF_HEADERS, _CF_MANAGED, _CF_API_PER_PAGE
+
+    _CF_HEADERS = {
+            'Content-Type'  : 'application/json',
+            'Authorization' : 'Bearer ' + _get_cftoken()
+        }
+
+    _CF_MANAGED = _get_cfzones()
+
+    _CF_API_PER_PAGE = 1000
+
+
 def _get_ptrs():
     result, data, comment = netdb_get(_NETDB_COLUMN, DNS_PROJECT, project=True)
 
@@ -49,7 +80,7 @@ def _get_ptrs():
         except KeyError:
             return None
 
-    dns =   { 
+    dns  =  { 
                 ip_address(k.split('/')[0]).reverse_pointer: {
                     'ptr': pull_ptr(v),
                     'ip' : k.split('/')[0],
@@ -211,6 +242,81 @@ def _update_cf_records(cf_managed):
             _cf_delete(name, content['ptr'], content['zone'], content['cf_id'])
 
 
+@restful_method(methods = ['GET', 'POST'])
+def set_cfzone(method, data):
+    db = utilDB(_UTIL_COLLECTION)
+
+    entry = {
+            'type'     :  'managed_zone',
+            'provider' :  'cloudflare',
+            'zone'     :  data.get('zone'),
+            'account'  :  data.get('account'),
+            'managed'  :  data.get('managed'),
+            'prefix'   :  data.get('prefix'),
+            }
+
+    if not all(isinstance(i, str) for i in [ entry['zone'], entry['account'], entry['prefix'] ]):
+        return False, None, 'zone, account and prefix must be set'
+
+    if not isinstance(entry['managed'], bool):
+        return False, None, 'managed must be either true or false'
+
+    try:
+        ip_network(entry['prefix'])
+    except ValueError:
+        return False, None, 'invalid prefix'
+
+    if method == 'POST':
+        filt = { "prefix": entry['prefix'], "type": "managed_zone", "provider": "cloudflare" }
+        result, out, comment = db.replace_one(filt, entry)
+        return result, entry, comment
+    else:
+        return True, entry, 'dry run: database not updated'
+
+
+@restful_method(methods = ['DELETE'])
+def delete_cfzone(method, data):
+    db = utilDB(_UTIL_COLLECTION)
+    prefix = data.get('prefix')
+
+    try:
+        ip_network(prefix)
+    except ValueError:
+        return False, None, 'invalid prefix'
+
+    filt = { "prefix": prefix, "type": "managed_zone", "provider": "cloudflare" }
+    return db.delete(filt)
+
+
+@restful_method
+def get_cfzones(method, data):
+
+    result = _get_cfzones()
+
+    if result:
+        return True, result, 'cf managed zones'
+    else:
+        return False, None, 'no cf managed zones found'
+
+
+@restful_method(methods = ['POST'])
+def set_cftoken(method, data):
+    db = utilDB(_UTIL_COLLECTION)
+
+    token = data.get('token')
+    if not isinstance(token, str):
+        return False, None, 'token must be a valid string'
+
+    entry = {
+            "type"     : "token",
+            "provider" : "cloudflare",
+            "token"    : token,
+            }
+
+    filt = { "type": "token", "provider": "cloudflare" }
+    return db.replace_one(filt, entry)
+
+
 @restful_method
 def get_ptrs(method, data):
     """
@@ -223,16 +329,24 @@ def get_ptrs(method, data):
 
 @restful_method
 def get_cf(method, data):
+    _init_cf()
+
     cf_managed = deepcopy(_CF_MANAGED)
 
-    for zone, zone_data in cf_managed.items():
-        zone_data['ptrs'] = _pull_cf_managed(_CF_MANAGED[zone]['zone'])
+    try:
+        for zone, zone_data in cf_managed.items():
+            zone_data['ptrs'] = _pull_cf_managed(_CF_MANAGED[zone]['zone'])
+
+    except CloudflareException as e:
+        return False, { 'url': e.url }, e.message
 
     return True, cf_managed, 'CF managed PTR Zones'
 
 
 @restful_method(methods = ['GET', 'POST'])
 def update_cf(method, data):
+    _init_cf()
+
     result, data, comment = _get_ptrs()
 
     if not result:
@@ -249,7 +363,7 @@ def update_cf(method, data):
             _update_cf_records(cf_managed)
             comment = 'Update of netdb managed zones and records complete'
         else:
-            comment = 'List of netdb records to requiring synchronisation'
+            comment = 'List of netdb records requiring synchronisation'
 
     except CloudflareException as e:
         success    = False
