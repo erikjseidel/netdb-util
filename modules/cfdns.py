@@ -18,7 +18,6 @@ class CloudflareException(Exception):
         url     -- CF API url
         message -- explanation of the error
     """
-
     def __init__(self, url, data, message):
         self.url     = url
         self.data    = data
