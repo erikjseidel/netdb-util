@@ -11,7 +11,6 @@ _NETDB_COLUMN = 'interface'
 
 _UTIL_COLLECTION = 'managed_dns'
 
-
 class CloudflareException(Exception):
     """Exception raised for non-200 returns in CF API calls
 
@@ -244,8 +243,6 @@ def _update_cf_records(cf_managed):
 
 @restful_method(methods = ['GET', 'POST'])
 def set_cfzone(method, data):
-    db = utilDB(_UTIL_COLLECTION)
-
     entry = {
             'type'     :  'managed_zone',
             'provider' :  'cloudflare',
@@ -268,7 +265,8 @@ def set_cfzone(method, data):
 
     if method == 'POST':
         filt = { "prefix": entry['prefix'], "type": "managed_zone", "provider": "cloudflare" }
-        result, out, comment = db.replace_one(filt, entry)
+
+        result, out, comment = utilDB(_UTIL_COLLECTION).replace_one(filt, entry)
         return result, entry, comment
     else:
         return True, entry, 'dry run: database not updated'
@@ -276,7 +274,6 @@ def set_cfzone(method, data):
 
 @restful_method(methods = ['DELETE'])
 def delete_cfzone(method, data):
-    db = utilDB(_UTIL_COLLECTION)
     prefix = data.get('prefix')
 
     try:
@@ -284,13 +281,14 @@ def delete_cfzone(method, data):
     except ValueError:
         return False, None, 'invalid prefix'
 
+    db = utilDB(_UTIL_COLLECTION)
     filt = { "prefix": prefix, "type": "managed_zone", "provider": "cloudflare" }
+
     return db.delete(filt)
 
 
 @restful_method
 def get_cfzones(method, data):
-
     result = _get_cfzones()
 
     if result:
@@ -301,8 +299,6 @@ def get_cfzones(method, data):
 
 @restful_method(methods = ['POST'])
 def set_cftoken(method, data):
-    db = utilDB(_UTIL_COLLECTION)
-
     token = data.get('token')
     if not isinstance(token, str):
         return False, None, 'token must be a valid string'
@@ -313,7 +309,9 @@ def set_cftoken(method, data):
             "token"    : token,
             }
 
+    db = utilDB(_UTIL_COLLECTION)
     filt = { "type": "token", "provider": "cloudflare" }
+
     return db.replace_one(filt, entry)
 
 
