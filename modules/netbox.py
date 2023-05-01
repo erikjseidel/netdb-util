@@ -29,10 +29,26 @@ class NetboxException(Exception):
         super().__init__(self.message)
 
 
+def _generate_ibgp_ips():
+    bgp_ips = {}
+    for i in ['ibgp_ipv4', 'ibgp_ipv6']:
+        url = NETBOX_BASE + '/api/ipam/ip-addresses/?tag=%s' % i
+        nb_bgp_ips = requests.get(url, headers = NETBOX_HEADERS).json().get('results')
+        for ip in nb_bgp_ips:
+            device = ip['assigned_object']['device']['name']
+            if device not in bgp_ips:
+                bgp_ips[device] = {}
+            bgp_ips[device][i] = ip['address']
+
+    return bgp_ips
+
+
 def _generate_devices():
     netbox_roles = {}
     netbox_sites = {}
     out = {}
+
+    bgp_ips = _generate_ibgp_ips()
 
     url = NETBOX_BASE + '/api/dcim/devices/'
     netbox_dev = requests.get(url, headers = NETBOX_HEADERS).json().get('results')
@@ -41,6 +57,26 @@ def _generate_devices():
         raise NetboxException(url, None, 'netbox returned empty device set')
 
     for device in netbox_dev:
+        if device['status']['value'] not in ['active', 'staged']:
+            continue
+
+        slug = device['site']['slug']
+        site = netbox_sites.get(slug)
+        if not site:
+            url  = device['site']['url']
+            site = requests.get(url, headers = NETBOX_HEADERS).json() 
+            netbox_sites[slug] = site
+
+        if site['status']['value'] not in ['active', 'staging', 'decommissioning']:
+            continue
+
+        slug = device['device_role']['slug']
+        role = netbox_roles.get(slug)
+        if not role:
+            url  = device['device_role']['url']
+            role = requests.get(url, headers = NETBOX_HEADERS).json() 
+            netbox_roles[slug] = role
+
         device_id = device['id']
         name = device['name']
 
@@ -56,24 +92,10 @@ def _generate_devices():
             if router_id:
                 out[name]['cvars']['router_id'] = router_id
 
-        slug = device['device_role']['slug']
-        role = netbox_roles.get(slug)
-        if not role:
-            url  = device['device_role']['url']
-            role = requests.get(url, headers = NETBOX_HEADERS).json() 
-            netbox_roles[slug] = role
-
         try:
             roles = role['custom_fields']['netdb_roles']
         except KeyError:
             raise NetboxException(None, role, 'no netdb_roles found')
-
-        slug = device['site']['slug']
-        site = netbox_sites.get(slug)
-        if not site:
-            url  = device['site']['url']
-            site = requests.get(url, headers = NETBOX_HEADERS).json() 
-            netbox_sites[slug] = site
 
         try:
             # In the case of sites w/ multiple ASNs, assign first one.
@@ -88,14 +110,14 @@ def _generate_devices():
                 'providers' : custom['site_providers'],
                 'roles'     : roles + custom.get('netdb_roles'),
                 })
+
         except KeyError:
             raise NetboxException(None, site, 'Netbox is missing one or more custome fields for this site')
 
         for i in ['ibgp_ipv4', 'ibgp_ipv6']:
-            url = NETBOX_BASE + '/api/ipam/ip-addresses/?tag=%s&device_id=%s' % (i, str(device_id))
-            ibgp = requests.get(url, headers = NETBOX_HEADERS).json().get('results')
-            if ibgp:
-                out[name]['cvars'][i] = ibgp[0]['address'].split('/')[0]
+            ips = bgp_ips.get(name)
+            if ips and i in ips:
+                out[name]['cvars'][i] = ips[i].split('/')[0]
 
     return out
 
