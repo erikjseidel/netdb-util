@@ -48,13 +48,12 @@ def _generate_devices():
     netbox_sites = {}
     out = {}
 
-    bgp_ips = _generate_ibgp_ips()
-
     url = NETBOX_BASE + '/api/dcim/devices/'
     netbox_dev = requests.get(url, headers = NETBOX_HEADERS).json().get('results')
-
     if not netbox_dev:
         raise NetboxException(url, None, 'netbox returned empty device set')
+
+    bgp_ips = _generate_ibgp_ips()
 
     for device in netbox_dev:
         if device['status']['value'] not in ['active', 'staged']:
