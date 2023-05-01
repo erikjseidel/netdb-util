@@ -21,49 +21,6 @@ def util_internal(func):
     return decorator
 
 
-def netdb_consumer(func):
-    """
-    Converts netdb three tuple dict output into internal three tuple ret format.
-
-    netdb is expected to return a dict of the following format:
-            {
-            'result' : bool,
-            'error'  : bool,
-            'out'    : dict,
-            'comment': str,
-            }
-
-    This will be converted into three vars and returned:
-            result:  (bool) whether or not result was given
-            out:     (dict) dictionary containing netdb data
-            comment: (str)  a brief message describing operation / result
-
-    If 'out' is not found in netdb dict result, returned 'out' will be set to None.
-    """
-    def decorator(*args, **kwargs):
-        response = func(*args, **kwargs)
-
-        try:
-            ret = response.json()
-        except Exception:
-            return False, None, 'Invalid netdb response'
-
-        if (not ret['result']) or ret['error']:
-            result = False
-        else:
-            result = True
-
-        if 'out' in ret:
-            out = ret['out']
-        else:
-            out = None
-
-        comment = ret['comment']
-
-        return result, out, comment
-    return decorator
-
-
 def restful_method(methods=['GET']):
     """
     Enforces three tuple return and converts it to salt style output wrapped in a

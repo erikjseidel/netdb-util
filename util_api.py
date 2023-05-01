@@ -35,14 +35,10 @@ def api_entry( module = None, endpoint = None ):
     except ModuleNotFoundError:
         return MOD_INVALID
 
-    if endpoint.startswith('_'):
+    if endpoint not in m.__all__:
         return EP_INVALID
 
-    try:
-        method = getattr(m, endpoint)
-    except AttributeError:
-        return EP_INVALID
-
+    method = getattr(m, endpoint)
     if not callable(method):
         return EP_INVALID
 

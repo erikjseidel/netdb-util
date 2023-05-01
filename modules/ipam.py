@@ -7,6 +7,9 @@ from util.decorators import restful_method
 from util.netdb      import netdb_get
 from util.query      import ADDR_PROJECT
 
+# Public symbols
+__all__ = [ 'report', 'chooser' ]
+
 _NETDB_COLUMN = 'interface'
 
 @restful_method

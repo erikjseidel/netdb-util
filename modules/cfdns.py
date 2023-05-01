@@ -7,6 +7,16 @@ from util.netdb      import netdb_get
 from util.query      import DNS_PROJECT
 from util.utildb_api import utilDB
 
+__all__ = [ 
+        'set_cfzone', 
+        'delete_cfzone', 
+        'get_cfzones',
+        'set_cftoken', 
+        'get_ptrs', 
+        'get_cf', 
+        'update_cf',
+        ]
+
 _NETDB_COLUMN = 'interface'
 
 _UTIL_COLLECTION = 'managed_dns'
