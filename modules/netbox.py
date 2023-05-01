@@ -32,8 +32,6 @@ class NetboxException(Exception):
 def _generate_devices():
     netbox_roles = {}
     netbox_sites = {}
-    ibgp = {}
-
     out = {}
 
     url = NETBOX_BASE + '/api/dcim/devices/'
