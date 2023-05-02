@@ -7,13 +7,15 @@ from util.netdb import (
         )
 
 from util.decorators import restful_method
-from config.netbox   import NETBOX_BASE, NETBOX_HEADERS
+from config.netbox   import NETBOX_BASE, NETBOX_HEADERS, NETBOX_SOURCE
 
 # Public symbols
 __all__ = [ 'sync_netdb', 'generate_devices' ]
 
 _NETDB_DEV_COLUMN   = 'device'
 _NETDB_IFACE_COLUMN = 'interface'
+
+_FILTER = { 'datasource': NETBOX_SOURCE['name'] }
 
 class NetboxException(Exception):
     """Exception raised for failed / unexpected netbox API calls / results
@@ -49,7 +51,7 @@ def _generate_devices():
     out = {}
 
     url = NETBOX_BASE + '/api/dcim/devices/'
-    netbox_dev = requests.get(url, headers = NETBOX_HEADERS).json().get('results')
+    netbox_dev = requests.get(url, headers=NETBOX_HEADERS).json().get('results')
     if not netbox_dev:
         raise NetboxException(url, None, 'netbox returned empty device set')
 
@@ -80,6 +82,16 @@ def _generate_devices():
         name = device['name']
 
         out[name] = {}
+        out[name]['datasource'] = NETBOX_SOURCE['name']
+        out[name]['weight']     = NETBOX_SOURCE['weight']
+        out[name]['meta'] = {
+                'netbox' : {
+                    'id'            :  device_id,
+                    'last_updated'  :  device['last_updated'],
+                    'status'        :  device['status']['value'],
+                    },
+                }
+
         out[name]['cvars'] = {}
 
         custom = device.get('custom_fields')
@@ -128,7 +140,7 @@ def _synchronize_netdb_entries(test = True):
     if not result:
         return result, out, message
 
-    result, netdb_dev, message = netdb_get(_NETDB_DEV_COLUMN)
+    result, netdb_dev, message = netdb_get(_NETDB_DEV_COLUMN, data = _FILTER)
     if not result:
         netdb_dev = {}
 

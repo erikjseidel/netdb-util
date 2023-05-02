@@ -1,4 +1,5 @@
 import requests, json
+from pprint import pprint
 
 NETDB_URL = "http://127.0.0.1:8001/api/"
 
@@ -61,6 +62,7 @@ def netdb_add(column, data):
 
     try:
         ret = requests.post(url, data = json.dumps(data), headers = HEADERS).json()
+        pprint (ret)
     except Exception:
         raise NetdbException(url, data, 'Invalid netdb response')
 

@@ -37,7 +37,7 @@ def report(method, data):
     report_text = "Salt managed addresses:\n----------\n"
 
     for device, interfaces in data.items():
-        for iface, iface_data in interfaces['interfaces'].items():
+        for iface, iface_data in interfaces.items():
             if 'address' in iface_data:
                 for addr, addr_data in iface_data['address'].items():
 
@@ -101,7 +101,7 @@ def chooser(method, data):
     avail_addr = []
 
     for device, interfaces in data.items():
-        for iface, iface_data in interfaces['interfaces'].items():
+        for iface, iface_data in interfaces.items():
             if 'address' in iface_data:
                 addresses = iface_data['address'].keys()
                 for addr in addresses:
