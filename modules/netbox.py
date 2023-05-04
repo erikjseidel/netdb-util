@@ -188,6 +188,12 @@ def _generate_interfaces(device, tag=None):
     for iface in ifaces_in:
         name = iface['name']
 
+        iface_tags = [ i['name'] for i in iface['tags'] ]
+
+        # Unmanaged interfaces are ignored
+        if 'unmanaged' in iface_tags:
+            continue
+
         out[name] = {}
 
         type = iface['type']['value']
