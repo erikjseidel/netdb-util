@@ -217,6 +217,9 @@ def _generate_interfaces(device, in_tag=None, in_name=None):
     virtual_links = _generate_virtual_links()
     device_ips    = { device : _generate_device_ips(device_id) }
 
+    # Used to build lag interfaces
+    device_ifaces = None
+
     for iface in ifaces_in:
         name = iface['name']
 
@@ -226,39 +229,56 @@ def _generate_interfaces(device, in_tag=None, in_name=None):
         if 'unmanaged' in iface_tags:
             continue
 
-        out[name] = {}
+        entry = {}
 
         type = iface['type']['value']
         if type in netbox.NETBOX_ETHERNET:
-            out[name].update({
+            entry.update({
                 'type'      :  'ethernet',
                 'vyos_type' :  'ethernet',
                 })
         elif type in netbox.NETBOX_NETDB:
             # directly mapped types
-            out[name].update({
+            entry.update({
                 'type'      :  type,
                 })
+        elif type == 'lag':
+            entry['type'] = 'lacp'
+            lacp =  {
+                    'rate'        : 'fast',
+                    'min_links'   : 1,
+                    'hash_policy' : 'layer2+3',
+                    'members'     : [],
+                    }
+
+            if 'layer3+4' in iface_tags:
+                lacp['hash_policy'] = 'layer3+4'
+
+            if not device_ifaces:
+                device_ifaces = nb.set('/dcim/interfaces/').get(device_id=device_id)
+
+            for i in device_ifaces:
+                if i['lag'] and i['lag'].get('id') == iface['id']:
+                    lacp['members'].append(i['name'])
+
+            entry['lacp'] = lacp
         else:
             raise NetboxException(url, None, 500, '%s: invalid type for %s' % (device, name) )
 
         # if virtual link is not marked as connected then disable.
-        try:
-           if virtual_links[device][name]['status'] != 'connected':
+        if iface['virtual_link'] and virtual_links[device][name]['status'] != 'connected':
                 out[name]['disabled'] = True
-        except KeyError:
-            pass
 
         if not iface['enabled']:
-            out[name]['disabled'] = True
+            entry['disabled'] = True
 
         for k in ['description', 'mtu']:
             v = iface.get(k)
             if v:
-                out[name][k] = v
+                entry[k] = v
 
         if iface['custom_fields']['ttl']:
-            out[name]['ttl'] = iface['custom_fields']['ttl']
+            entry['ttl'] = iface['custom_fields']['ttl']
 
         if iface['type']['value'] in ['gre', 'l2gre']:
             # Get source IP and interface for tunnels
@@ -268,17 +288,16 @@ def _generate_interfaces(device, in_tag=None, in_name=None):
                 if ips:
                     for ip in ips:
                         if 'tun_src' in ip['tags']:
-                            out[name]['source'] = ip['address'].split('/')[0]
+                            entry['source'] = ip['address'].split('/')[0]
                             break
 
                 if iface['custom_fields']['bind_parent']:
-                    out[name]['interface'] = parent
+                    entry['interface'] = parent
 
-            # THIS NEEDS CLEANING UP
-            # Get remote IP address
-            try:
+            if iface['link_peers'] and iface['virtual_link']:
                 # there should only ever be one link_peer
                 assert len(iface['link_peers']) == 1
+
                 link_peer = iface['link_peers'][0]
 
                 peer_name  = link_peer['device']['name']
@@ -293,16 +312,12 @@ def _generate_interfaces(device, in_tag=None, in_name=None):
 
                 for ip in device_ips[peer_name][peer_iface_parent]:
                     if 'tun_src' in ip['tags']:
-                        out[name]['remote'] = ip['address'].split('/')[0]
-
-            except KeyError:
-                # This tunnel is not wired or its remote has no eligible remote so nothing to be done.
-                pass
+                        entry['remote'] = ip['address'].split('/')[0]
 
         for ip in (device_ips[device].get(name) or []):
             addr = ip['address']
-            if 'addresses' not in out[name]:
-                out[name]['addresses'] = {}
+            if 'addresses' not in entry:
+                entry['addresses'] = {}
             
             if 'ptr' in ip or 'tags' in ip:
                 meta = {}
@@ -311,28 +326,29 @@ def _generate_interfaces(device, in_tag=None, in_name=None):
                 if 'tags' in ip:
                     meta['tags'] = ip['tags']
 
-                out[name]['addresses'][addr] = { 'meta': meta }
+                entry['addresses'][addr] = { 'meta': meta }
             else:
-                out[name]['addresses'][addr] = None
-
-        tags = [ i['name'] for i in iface['tags'] ]
+                entry['addresses'][addr] = None
 
         # TBD: Order by v['weight']
-        fw_sets = [ v for k, v in fw_contexts.items() if k in tags ]
+        fw_sets = [ v for k, v in fw_contexts.items() if k in iface_tags ]
 
         for fw in fw_sets:
-            out[name]['firewall'] = fw['data']
+            entry['firewall'] = fw['data']
 
         # Add netbox metadata
-        out[name]['datasource'] = netbox.NETBOX_SOURCE['name']
-        out[name]['weight']     = netbox.NETBOX_SOURCE['weight']
-        out[name]['meta'] = {
+        entry['datasource'] = netbox.NETBOX_SOURCE['name']
+        entry['weight']     = netbox.NETBOX_SOURCE['weight']
+        entry['meta'] = {
                 'netbox' : {
                     'id'            :  iface['id'],
                     'url'           :  iface['url'],
                     'last_updated'  :  iface['last_updated'],
                     },
                 }
+
+        out[name] = entry
+
     return out
 
 
@@ -370,17 +386,16 @@ def _generate_devices():
         device_id = device['id']
         name = device['name']
 
-        out[name] = {}
-
-        out[name]['cvars'] = {}
+        entry = {}
+        cvars = {}
 
         if custom := device.get('custom_fields'):
             iso = custom.get('iso_address')
             if iso:
-                out[name]['cvars']['iso'] = iso
+                cvars['iso'] = iso
             router_id = custom.get('router_id')
             if router_id:
-                out[name]['cvars']['router_id'] = router_id
+                cvars['router_id'] = router_id
 
         try:
             roles = role['custom_fields']['netdb_roles']
@@ -389,15 +404,15 @@ def _generate_devices():
 
         try:
             # In the case of sites w/ multiple ASNs, assign first one.
-            out[name]['cvars']['local_asn'] = site['asns'][0]['asn']
+            cvars['local_asn'] = site['asns'][0]['asn']
         except:
             raise NetboxException(None, site, 'Netbox found no ASNs for this site')
 
-        out[name]['cvars']['local_asn'] = site['asns'][0]['asn']
+        cvars['local_asn'] = site['asns'][0]['asn']
 
         try:
             custom = site['custom_fields']
-            out[name].update({
+            entry.update({
                 'location'  : site['region']['display'],
                 'roles'     : roles + custom.get('netdb_roles'),
                 })
@@ -408,18 +423,18 @@ def _generate_devices():
         for i in ['ibgp_ipv4', 'ibgp_ipv6']:
             ips = bgp_ips.get(name)
             if ips and i in ips:
-                out[name]['cvars'][i] = ips[i].split('/')[0]
+                cvars[i] = ips[i].split('/')[0]
 
         if name in providers:
             for provider in providers[name]:
-                if 'providers' not in out[name]:
-                    out[name]['providers'] = []
-                out[name]['providers'].append(provider['slug'])
+                if 'providers' not in entry:
+                    entry['providers'] = []
+                entry['providers'].append(provider['slug'])
 
         # Add netbox metadata
-        out[name]['datasource'] = netbox.NETBOX_SOURCE['name']
-        out[name]['weight']     = netbox.NETBOX_SOURCE['weight']
-        out[name]['meta'] = {
+        entry['datasource'] = netbox.NETBOX_SOURCE['name']
+        entry['weight']     = netbox.NETBOX_SOURCE['weight']
+        entry['meta'] = {
                 'netbox' : {
                     'id'            :  device_id,
                     'url'           :  device['url'],
@@ -427,6 +442,9 @@ def _generate_devices():
                     'status'        :  device['status']['value'],
                     },
                 }
+
+        entry['cvars'] = cvars
+        out[name] = entry
 
     return out
 
@@ -500,10 +518,11 @@ def generate_devices(method, data):
 @restful_method
 def generate_interfaces(method, data):
 
-    name = 'SIN2'
+    name = 'SIN1'
 
     #try:
-    data = _generate_interfaces(name,)
+    #data = _generate_interfaces(name, in_name='bond0')
+    data = _generate_interfaces('SIN2',)
     #except NetboxException as e:
     #    return False, { 'api_url': e.url }, e.message
 
