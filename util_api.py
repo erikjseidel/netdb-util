@@ -1,6 +1,9 @@
 from flask import Flask, Response, request, json
 
-import importlib
+import importlib, logging
+
+logging.basicConfig(format='%(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 

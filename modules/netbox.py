@@ -1,5 +1,5 @@
 
-import requests, json
+import requests, json, logging
 from copy import deepcopy
 from util.decorators import restful_method
 from config import netbox
@@ -8,18 +8,21 @@ from util.netdb import (
         netdb_add, netdb_replace, netdb_delete
         )
 
-from pprint import pprint
-
 # Public symbols
-__all__ = [ 'sync_netdb', 'generate_devices', 'generate_interfaces' ]
+__all__ = [
+        'synchronize_devices',
+        'generate_devices',
+        'generate_interfaces',
+        ]
 
 _NETDB_DEV_COLUMN   = 'device'
 _NETDB_IFACE_COLUMN = 'interface'
 
 _FILTER = { 'datasource': netbox.NETBOX_SOURCE['name'] }
 
-class Netbox:
+logger = logging.getLogger(__name__)
 
+class Netbox:
     _BASE = netbox.NETBOX_BASE
     _HEADERS = netbox.NETBOX_HEADERS
     
@@ -61,8 +64,7 @@ class Netbox:
         if url.endswith('?') or url.endswith('&'):
             url = url[:-1]
 
-        pprint(url)
-
+        logger.debug(f'Netbox.get: {url}')
         resp = requests.get(url, headers = self._HEADERS)
         
         if (code := resp.status_code) != 200:
@@ -504,7 +506,7 @@ def _generate_devices():
     return out
 
 
-def _synchronize_netdb_entries(test = True):
+def _synchronize_devices(test = True):
     netbox_dev = _generate_devices()
 
     result, out, message = netdb_validate(_NETDB_DEV_COLUMN, data = netbox_dev)
@@ -545,17 +547,20 @@ def _synchronize_netdb_entries(test = True):
     else:
         message = 'Synchronization complete.'
 
+    if not test:
+        logger.info(f'_synchronize_devices: {message}')
+
     return True if changes else False, changes, message
 
 
 @restful_method(methods = ['GET', 'POST'])
-def sync_netdb(method, data):
+def synchronize_devices(method, data):
     test = True
     if method == 'POST':
         test = False
 
     try:
-        return _synchronize_netdb_entries(test)
+        return _synchronize_devices(test)
     except NetboxException as e:
         return False, e.data, e.message
 
@@ -564,7 +569,9 @@ def sync_netdb(method, data):
 def generate_devices(method, data):
     try:
         data = _generate_devices()
+
     except NetboxException as e:
+        logger.error(f'exception at netbox.generate_devices: {e.message}', exc_info=e)
         return False, e.data, e.message
 
     return True, data, 'Devices generated from Netbox datasource'
