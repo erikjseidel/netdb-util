@@ -80,7 +80,7 @@ class NetboxException(Exception):
         url     -- CF API url
         message -- explanation of the error
     """
-    def __init__(self, url, data, code, message = None):
+    def __init__(self, url=None, data=None, code=None, message=None):
         self.url     = url
         self.data    = data
         self.code    = code
@@ -237,13 +237,19 @@ def _generate_interfaces(device, in_tag=None, in_name=None):
                 'type'      :  'ethernet',
                 'vyos_type' :  'ethernet',
                 })
+
         elif type in netbox.NETBOX_NETDB:
             # directly mapped types
             entry.update({
                 'type'      :  type,
                 })
+
         elif type == 'lag':
-            entry['type'] = 'lacp'
+            entry.update({
+                'type'      : 'lacp',
+                'vyos_type' : 'bonding',
+                })
+
             lacp =  {
                     'rate'        : 'fast',
                     'min_links'   : 1,
@@ -262,8 +268,50 @@ def _generate_interfaces(device, in_tag=None, in_name=None):
                     lacp['members'].append(i['name'])
 
             entry['lacp'] = lacp
+
+        elif type == 'vlan':
+            entry.update({
+                'type'      : 'vlan',
+                'vyos_type' : 'vif',
+                })
+
+            if not iface['untagged_vlan']:
+                raise NetboxException(
+                        message = '%s %s: untagged VLAN ID is required' % (device, name)
+                        )
+
+            if not iface['parent']:
+                raise NetboxException(
+                        message = '%s %s: parent interface required' % (device, name) 
+                        )
+
+            vlan =  {
+                    'id': iface['untagged_vlan']['vid'],
+                    'parent' : iface['parent']['name'],
+                    }
+
+            if not device_ifaces:
+                device_ifaces = nb.set('/dcim/interfaces/').get(device_id=device_id)
+
+            # This needs to be made more efficient (e.g. replace w/ iface name keyed map)
+            for i in device_ifaces:
+                if i['id'] == iface['parent']['id']:
+                    parent_type = i['type']['value']
+
+                    if parent_type in netbox.NETBOX_ETHERNET:
+                        vlan['parent_vyos_type'] = 'ethernet'
+                    elif parent_type == 'lag':
+                        vlan['parent_vyos_type'] = 'bonding'
+                    else:
+                        raise NetboxException(
+                                message = '%s: invalid type for %s' % (device, name)
+                                )
+                    break
+
+            entry['vlan'] = vlan
+
         else:
-            raise NetboxException(url, None, 500, '%s: invalid type for %s' % (device, name) )
+            raise NetboxException( message = '%s: invalid type for %s' % (device, name) )
 
         # if virtual link is not marked as connected then disable.
         if iface['virtual_link'] and virtual_links[device][name]['status'] != 'connected':
@@ -522,7 +570,7 @@ def generate_interfaces(method, data):
 
     #try:
     #data = _generate_interfaces(name, in_name='bond0')
-    data = _generate_interfaces('SIN2',)
+    data = _generate_interfaces('SIN1',)
     #except NetboxException as e:
     #    return False, { 'api_url': e.url }, e.message
 
