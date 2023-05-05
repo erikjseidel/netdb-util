@@ -201,6 +201,15 @@ def _generate_virtual_links():
     return out
 
 
+def _generate_indexed_ifaces(device_id):
+    out = {}
+
+    for iface in Netbox('/dcim/interfaces/').get(device_id=device_id):
+        name = iface.get('name')
+        out[name] = iface
+    return out
+
+
 def _generate_interfaces(device, in_tag=None, in_name=None):
     out = {}
 
@@ -261,11 +270,11 @@ def _generate_interfaces(device, in_tag=None, in_name=None):
                 lacp['hash_policy'] = 'layer3+4'
 
             if not device_ifaces:
-                device_ifaces = nb.set('/dcim/interfaces/').get(device_id=device_id)
+                device_ifaces = _generate_indexed_ifaces(device_id)
 
-            for i in device_ifaces:
-                if i['lag'] and i['lag'].get('id') == iface['id']:
-                    lacp['members'].append(i['name'])
+            for k, v in device_ifaces.items():
+                if v['lag'] and v['lag'].get('id') == iface['id']:
+                    lacp['members'].append(v['name'])
 
             entry['lacp'] = lacp
 
@@ -285,28 +294,26 @@ def _generate_interfaces(device, in_tag=None, in_name=None):
                         message = '%s %s: parent interface required' % (device, name) 
                         )
 
+            parent = iface['parent']['name']
+
             vlan =  {
                     'id': iface['untagged_vlan']['vid'],
-                    'parent' : iface['parent']['name'],
+                    'parent' : parent,
                     }
 
             if not device_ifaces:
-                device_ifaces = nb.set('/dcim/interfaces/').get(device_id=device_id)
+                device_ifaces = _generate_indexed_ifaces(device_id)
 
-            # This needs to be made more efficient (e.g. replace w/ iface name keyed map)
-            for i in device_ifaces:
-                if i['id'] == iface['parent']['id']:
-                    parent_type = i['type']['value']
+            parent_type = device_ifaces[parent]['type']['value']
 
-                    if parent_type in netbox.NETBOX_ETHERNET:
-                        vlan['parent_vyos_type'] = 'ethernet'
-                    elif parent_type == 'lag':
-                        vlan['parent_vyos_type'] = 'bonding'
-                    else:
-                        raise NetboxException(
-                                message = '%s: invalid type for %s' % (device, name)
-                                )
-                    break
+            if parent_type in netbox.NETBOX_ETHERNET:
+                vlan['parent_vyos_type'] = 'ethernet'
+            elif parent_type == 'lag':
+                vlan['parent_vyos_type'] = 'bonding'
+            else:
+                raise NetboxException(
+                        message = '%s: invalid type for %s' % (device, name)
+                        )
 
             entry['vlan'] = vlan
 
