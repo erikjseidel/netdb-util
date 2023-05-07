@@ -203,15 +203,6 @@ def _generate_virtual_links():
     return out
 
 
-def _generate_indexed_ifaces(device_id):
-    out = {}
-
-    for iface in Netbox('/dcim/interfaces/').get(device_id=device_id):
-        name = iface.get('name')
-        out[name] = iface
-    return out
-
-
 def _generate_devices():
     netbox_roles = {}
     netbox_sites = {}
@@ -360,11 +351,11 @@ def _generate_interfaces(device, in_tag=None, in_name=None):
                 lacp['hash_policy'] = 'layer3+4'
 
             if not device_ifaces:
-                device_ifaces = _generate_indexed_ifaces(device_id)
+                device_ifaces = Netbox('/dcim/interfaces/').get(device_id=device_id)
 
-            for k, v in device_ifaces.items():
-                if v['lag'] and v['lag'].get('id') == iface['id']:
-                    lacp['members'].append(v['name'])
+            for i in device_ifaces:
+                if i['lag'] and i['lag'].get('id') == iface['id']:
+                    lacp['members'].append(i['name'])
 
             entry['lacp'] = lacp
 
