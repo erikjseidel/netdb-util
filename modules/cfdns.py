@@ -364,13 +364,13 @@ def update_cf(method, data):
         cf_managed = _gen_cf_managed(data)
         if not cf_managed:
             success = False
-            comment = 'All netdb managed zones and records up to date.'
+            comment = 'All CF managed zones and records up to date.'
 
         elif method == 'POST':
             _update_cf_records(cf_managed)
-            comment = 'Update of netdb managed zones and records complete'
+            comment = 'Update complere. The CF zones and records listed below have been updated.'
         else:
-            comment = 'List of netdb records requiring synchronisation'
+            comment = 'List of CF records requiring synchronisation with netdb'
 
     except CloudflareException as e:
         success    = False

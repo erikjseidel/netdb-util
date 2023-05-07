@@ -492,11 +492,13 @@ def _synchronize_devices(test = True):
 
     changes = {}
 
+    adjective = 'required' if test else 'complete'
+
     for device, data in netbox_dev.items():
         if device in netdb_dev.keys():
             if data != netdb_dev[device]:
                 # Update required.
-                changes[device] = 'update required'
+                changes[device] = f'update {adjective}'
                 if not test:
                     netdb_replace(_NETDB_DEV_COLUMN, data = { device : data })
             netdb_dev.pop(device)
@@ -504,7 +506,7 @@ def _synchronize_devices(test = True):
             # Addition required
             if not test:
                 netdb_add(_NETDB_DEV_COLUMN, data = { device : data })
-            changes[device] = 'addition required'
+            changes[device] = f'addition {adjective}'
 
     # Any remaining (unpopped) devices in netdb need to be deleted
     for device in netdb_dev.keys():
@@ -512,10 +514,10 @@ def _synchronize_devices(test = True):
         if not test:
             filt = { "id": device, **_FILTER }
             netdb_delete(_NETDB_IFACE_COLUMN, data = filt)
-        changes[device] = 'removal from netdb required'
+        changes[device] = f'removal from netdb {adjective}'
 
     if not changes:
-        message = 'Netdb devices already in sync. No changes made.'
+        message = 'Netdb devices already synchronized. No changes made.'
     elif test:
         message = 'Dry run. No changes made.'
     else:
@@ -540,12 +542,13 @@ def _synchronize_interfaces(device, interface = None, test = True):
 
     changes = {}
 
+    adjective = 'required' if test else 'complete'
 
     for iface, data in netbox_ifaces[device].items():
         if iface in netdb_ifaces[device].keys():
             if data != netdb_ifaces[device][iface]:
                 # Update required.
-                changes[iface] = 'update required'
+                changes[iface] = f'update {adjective}'
                 if not test:
                     netdb_replace(_NETDB_IFACE_COLUMN, data = { device: { iface : data }})
             netdb_ifaces[device].pop(iface)
@@ -553,7 +556,7 @@ def _synchronize_interfaces(device, interface = None, test = True):
             # Addition required
             if not test:
                 netdb_add(_NETDB_IFACE_COLUMN, data = { device: { iface : data }})
-            changes[iface] = 'addition required'
+            changes[iface] = f'addition {adjective}'
 
     # Any remaining (unpopped) devices in netdb need to be deleted
     for iface in netdb_ifaces[device].keys():
@@ -561,10 +564,10 @@ def _synchronize_interfaces(device, interface = None, test = True):
         if not test:
             filt = { "set_id": device, "element_id": iface, **_FILTER }
             netdb_delete(_NETDB_IFACE_COLUMN, data = filt)
-        changes[iface] = 'removal from netdb required'
+        changes[iface] = f'removal from netdb {adjective}'
 
     if not changes:
-        message = 'Netdb devices already in sync. No changes made.'
+        message = 'Netdb interfaces already synchronized. No changes made.'
     elif test:
         message = 'Dry run. No changes made.'
     else:
