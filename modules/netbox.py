@@ -597,7 +597,7 @@ def synchronize_interfaces(method, data):
     if method == 'POST':
         test = False
 
-    if not ( device := data.get('device') ):
+    if not ( device := data.get('device').upper() ):
         return False, None, 'No device selected'
 
     try:
@@ -609,7 +609,7 @@ def synchronize_interfaces(method, data):
 @restful_method
 def generate_interfaces(method, data):
 
-    if not ( device := data.get('device') ):
+    if not ( device := data.get('device').upper() ):
         return False, None, 'No device selected'
 
     iface = data.get('interface')
@@ -619,4 +619,4 @@ def generate_interfaces(method, data):
     except NetboxException as e:
         return False, { 'api_url': e.url, 'code': e.code }, e.message
 
-    return True, data, 'Interfaces generated from Netbox datasource for %s' % name
+    return True, data, 'Interfaces generated from Netbox datasource for %s' % device
