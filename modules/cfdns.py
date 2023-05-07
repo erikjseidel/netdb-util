@@ -95,8 +95,8 @@ def _get_ptrs():
                     }
 
                 for i in data 
-                for j in data[i]['interfaces']
-                for k, v in data[i]['interfaces'][j]['address'].items()
+                for j in data[i]
+                for k, v in data[i][j]['address'].items()
             }
             
     return True, dns, 'netdb managed PTR records'

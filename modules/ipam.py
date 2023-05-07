@@ -27,7 +27,7 @@ def report(method, data):
     if data and 'device' in data:
         project['filter'].update({ 'set_id': str(data['device']).upper() })
 
-    result, data, comment = netdb_get(_NETDB_COLUMN, project, project=True)
+    result, data, comment = netdb_get(_NETDB_COLUMN, data=project, project=True)
 
     if not result:
         return result, None, comment

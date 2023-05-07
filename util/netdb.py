@@ -23,7 +23,7 @@ class NetdbException(Exception):
         super().__init__(self.message)
 
 
-def netdb_get(column, endpoint=None, data=None, project=False):
+def netdb_get(column, data=None, endpoint=None, project=False):
     url = NETDB_URL + column
 
     if endpoint:
