@@ -1,5 +1,4 @@
-import requests, json
-from pprint import pprint
+import requests, json, logging
 
 NETDB_URL = "http://127.0.0.1:8001/api/"
 
@@ -8,6 +7,7 @@ HEADERS = {
         "Accept": "application/json",
         }
 
+logger = logging.getLogger(__name__)
 
 class NetdbException(Exception):
     """Exception raised for failed / unexpected netdb API calls / results
@@ -23,11 +23,15 @@ class NetdbException(Exception):
         super().__init__(self.message)
 
 
-def netdb_get(column, data=None, project=False):
+def netdb_get(column, endpoint=None, data=None, project=False):
     url = NETDB_URL + column
 
-    if project:
+    if endpoint:
+        url += '/' + endpoint
+    elif project:
         url += '/project'
+    
+    logger.debug(f'_netdb_get: { url }')
 
     try:
         if data:
@@ -46,6 +50,8 @@ def netdb_get(column, data=None, project=False):
 def netdb_validate(column, data):
     url = NETDB_URL + column + '/validate'
 
+    logger.debug(f'_netdb_validate: { url }')
+
     try:
         ret = requests.post(url, data = json.dumps(data), headers = HEADERS).json()
     except Exception:
@@ -54,41 +60,47 @@ def netdb_validate(column, data):
     if ret['error']:
         raise NetdbException(url, ret.get(out), ret['comment'])
 
+
     return ret['result'], ret.get('out'), ret['comment']
 
 
 def netdb_add(column, data):
     url = NETDB_URL + column
 
+    logger.debug(f'_netdb_add: { url }')
+
     try:
         ret = requests.post(url, data = json.dumps(data), headers = HEADERS).json()
-        pprint (ret)
     except Exception:
         raise NetdbException(url, data, 'Invalid netdb response')
 
     if ret['error'] or not ret['result']:
-        raise NetdbException(url, ret.get(out), ret['comment'])
+        raise NetdbException(url, ret.get('out'), ret['comment'])
 
 
 def netdb_replace(column, data):
     url = NETDB_URL + column
+
+    logger.debug(f'_netdb_replace: { url }')
 
     try:
         ret = requests.put(url, data = json.dumps(data), headers = HEADERS).json()
     except Exception:
         raise NetdbException(url, data, 'Invalid netdb response')
 
-    if ret['error'] or not ret['result']:
-        raise NetdbException(url, ret.get(out), ret['comment'])
+    if ret.get('error') or not ret['result']:
+        raise NetdbException(url, ret.get('out'), ret['comment'])
 
 
 def netdb_delete(column, data):
     url = NETDB_URL + column
+
+    logger.debug(f'netdb_delete: { url }')
 
     try:
         ret = requests.delete(url, data = json.dumps(data), headers = HEADERS).json()
     except Exception:
         raise NetdbException(url, data, 'Invalid netdb response')
 
-    if ret['error'] or not ret['result']:
-        raise NetdbException(url, ret.get(out), ret['comment'])
+    if ret.get('error') or not ret['result']:
+        raise NetdbException(url, ret['out'], ret['comment'])
