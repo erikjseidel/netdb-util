@@ -621,7 +621,7 @@ def generate_interfaces(method, data):
     if not ( device := data.get('device') ):
         return False, None, 'No device selected'
 
-    iface := data.get('interface') ):
+    iface = data.get('interface')
 
     try:
         data = _generate_interfaces(device, in_name=iface)
