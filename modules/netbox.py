@@ -519,18 +519,19 @@ def _synchronize_devices(test = True):
     return True if changes else False, changes, message
 
 
-def _synchronize_interfaces(device, test = True):
-    netbox_ifaces = { device : _generate_interfaces(device) }
+def _synchronize_interfaces(device, interface = None, test = True):
+    netbox_ifaces = { device : _generate_interfaces(device, in_name=interface) }
 
     result, out, message = netdb_validate(_NETDB_IFACE_COLUMN, data = netbox_ifaces)
     if not result:
         return result, out, message
 
-    result, netdb_ifaces, message = netdb_get(_NETDB_IFACE_COLUMN, endpoint = device, data = _FILTER)
+    result, netdb_ifaces, message = netdb_get(_NETDB_IFACE_COLUMN, data = { 'set_id': device, **_FILTER })
     if not result:
-        netdb_ifaces = {}
+        netdb_ifaces = { device : {} }
 
     changes = {}
+
 
     for iface, data in netbox_ifaces[device].items():
         if iface in netdb_ifaces[device].keys():
@@ -597,11 +598,14 @@ def synchronize_interfaces(method, data):
     if method == 'POST':
         test = False
 
-    if not ( device := data.get('device').upper() ):
+    if not data.get('device'):
         return False, None, 'No device selected'
 
+    device= data.get('device').upper()
+    iface = data.get('interface')
+
     try:
-        return _synchronize_interfaces(device, test)
+        return _synchronize_interfaces(device, interface=iface, test=test)
     except NetboxException as e:
         return False, e.data, e.message
 
@@ -609,9 +613,10 @@ def synchronize_interfaces(method, data):
 @restful_method
 def generate_interfaces(method, data):
 
-    if not ( device := data.get('device').upper() ):
+    if not data.get('device'):
         return False, None, 'No device selected'
 
+    device= data.get('device').upper()
     iface = data.get('interface')
 
     try:
