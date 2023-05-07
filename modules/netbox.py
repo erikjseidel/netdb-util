@@ -158,8 +158,11 @@ def _generate_device_ips(device_id):
             out[parent] = []
 
         entry = {
-            'address'  :  ip['address'],
-            'family'   :  ip['family']['label'],
+            'address'      :  ip['address'],
+            'family'       :  ip['family']['label'],
+            'id'           :  ip['id'],
+            'url'          :  ip['url'],
+            'last_updated' :  ip['last_updated'],
             }
 
         if ptr := ip['dns_name']:
@@ -435,19 +438,24 @@ def _generate_interfaces(device, in_tag=None, in_name=None):
 
         for ip in (device_ips[device].get(name) or []):
             addr = ip['address']
+
+            netbox_meta = { 
+                    'id'           : ip['id'],
+                    'url'          : ip['url'],
+                    'last_updated' : ip['last_updated'],
+                    }
+
+            meta = { 'netbox': netbox_meta }
+
             if 'address' not in entry:
                 entry['address'] = {}
             
-            if 'ptr' in ip or 'tags' in ip:
-                meta = {}
-                if 'ptr' in ip:
+            if 'ptr' in ip:
                     meta['dns'] = { 'ptr' : ip['ptr'] }
-                if 'tags' in ip:
-                    meta['tags'] = ip['tags']
+            if 'tags' in ip:
+                meta['tags'] = ip['tags']
 
-                entry['address'][addr] = { 'meta': meta }
-            else:
-                entry['address'][addr] = None
+            entry['address'][addr] = { 'meta': meta }
 
         # TBD: Order by v['weight']
         fw_sets = [ v for k, v in fw_contexts.items() if k in iface_tags ]
