@@ -1,5 +1,4 @@
-
-_NETBOX_TOKEN = '<TOKEN>'
+from .secrets import _NETBOX_TOKEN
 
 NETBOX_BASE = 'http://localhost:8096'
 
@@ -12,6 +11,110 @@ NETBOX_SOURCE = {
         'name'    :  'netbox-test',
         'weight'  :  150,
         }
+
+DEVICE_GQL = """query {
+  device_list {
+    id
+    status
+    name
+    last_updated
+    site {
+      id
+      name
+      status
+      region {
+        name
+      }
+      asns {
+        asn
+      }
+      custom_fields
+    }
+    device_role {
+      id
+      name
+      custom_fields
+    }
+    custom_fields
+    interfaces(type: "dummy") {
+      id
+      name
+      ip_addresses {
+        id
+        address
+        tags {
+          name
+        }
+      }
+    }
+  }
+}"""
+
+IFACE_GQL = """query {
+  interface_list(device: "%s") {
+    id
+    name
+    type
+    description
+    mtu
+    custom_fields
+    untagged_vlan {
+      vid
+    }
+    lag {
+      name
+      id
+    }
+    tags {
+      name
+    }
+    last_updated
+    ip_addresses {
+      address
+      dns_name
+      tags {
+        name
+      }
+    }
+    parent {
+      ip_addresses {
+        address
+        tags {
+          name
+        }
+      }
+    }
+    virtual_link {
+      custom_fields
+      interface_a {
+        id
+        type
+        parent {
+          id
+          ip_addresses {
+            address
+            tags {
+              name
+            }
+          }
+        }
+      }
+      interface_b {
+        id
+        type
+        parent {
+          id
+          ip_addresses {
+            address
+            tags {
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+}"""
 
 NETBOX_NETDB = [
         'l2gre',

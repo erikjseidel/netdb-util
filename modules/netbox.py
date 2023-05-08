@@ -13,6 +13,7 @@ __all__ = [
         'synchronize_interfaces',
         'generate_devices',
         'generate_interfaces',
+        'test',
         ]
 
 _NETDB_DEV_COLUMN   = 'device'
@@ -29,6 +30,7 @@ class Netbox:
     def __init__(self, endpoint=None):
         self.set(endpoint)
 
+
     def set(self, endpoint):
         self.url = self._BASE + '/api'
 
@@ -40,9 +42,11 @@ class Netbox:
             self.url += endpoint
         return self
 
+
     def set_url(self, url):
         self.url = url
         return self
+
 
     def get(self, **kwargs):
         url = self.url + '?'
@@ -75,6 +79,17 @@ class Netbox:
         return json
 
 
+    def gql(self, query):
+        url = self._BASE + '/graphql/'
+        resp = requests.post(url, headers=self._HEADERS, json={"query": query})
+        print(json.dumps(query))
+
+        if (code := resp.status_code) != 200:
+            raise NetboxException(url, resp.json(), code)
+
+        return resp.json()
+
+
 class NetboxException(Exception):
     """Exception raised for failed / unexpected netbox API calls / results
 
@@ -88,18 +103,6 @@ class NetboxException(Exception):
         self.code    = code
         self.message = message
         super().__init__(self.message)
-
-
-def _generate_ibgp_ips():
-    bgp_ips = {}
-    for i in ['ibgp_ipv4', 'ibgp_ipv6']:
-        for ip in Netbox('/ipam/ip-addresses').get(tags=i):
-            device = ip['assigned_object']['device']['name']
-            if device not in bgp_ips:
-                bgp_ips[device] = {}
-            bgp_ips[device][i] = ip['address']
-
-    return bgp_ips
 
 
 def _generate_providers():
@@ -207,98 +210,62 @@ def _generate_virtual_links():
 
 
 def _generate_devices():
-    netbox_roles = {}
-    netbox_sites = {}
+    ret = Netbox().gql(netbox.DEVICE_GQL)
+
+    def _get_ip(device, tag):
+        for iface in device['interfaces']:
+            for ip in iface['ip_addresses']:
+                for t in ip['tags']:
+                    if t['name'] == tag:
+                        return ip['address'].split('/')[0]
+
+    def _gen_roles(device):
+        roles = []
+        if r := device['site']['custom_fields'].get('netdb_roles'):
+            roles = r
+        try:
+            r = device['device_role']['custom_fields']['netdb_roles']
+        except KeyError:
+            return roles
+
+        for i in r:
+            if i not in roles:
+                roles.append(i)
+
+        return roles
+    
     out = {}
+    if ret['data']:
+        for device in ret['data']['device_list']:
+            if ( device['site']['status'].lower() not in ['active', 'staging', 'decommissioning']
+                    or device['status'].lower() not in ['active', 'staged'] ):
+                continue
 
-    nb = Netbox('/dcim/devices')
-    if not ( netbox_dev := nb.get() ):
-        raise NetboxException(url, None, 'netbox returned empty device set')
+            entry = {
+                    'location'   : device['site']['region']['name'],
+                    'roles'      : _gen_roles(device),
+                    'datasource' : netbox.NETBOX_SOURCE['name'],
+                    'weight'     : netbox.NETBOX_SOURCE['weight'],
+                    }
 
-    bgp_ips   = _generate_ibgp_ips()
-    providers = _generate_providers()
+            meta = {
+                    'netbox': {
+                        'id'           : device['id'],
+                        'status'       : device['status'],
+                        'last_updated' : device['last_updated'],
+                        },
+                    }
+            entry['meta'] = meta
 
-    for device in netbox_dev:
-        # only load devices that are active or in staging
-        if device['status']['value'] not in ['active', 'staged']:
-            continue
-
-        slug = device['site']['slug']
-        if not ( site := netbox_sites.get(slug) ):
-            site = nb.set_url(device['site']['url']).get()
-            netbox_sites[slug] = site
-
-        # only load devices in sites with certain statuses
-        if site['status']['value'] not in ['active', 'staging', 'decommissioning']:
-            continue
-
-        slug = device['device_role']['slug']
-        if not ( role := netbox_roles.get(slug) ):
-            role = nb.set_url(device['device_role']['url']).get()
-            netbox_roles[slug] = role
-
-        device_id = device['id']
-        name = device['name']
-
-        entry = {}
-        cvars = {}
-
-        if custom := device.get('custom_fields'):
-            iso = custom.get('iso_address')
-            if iso:
-                cvars['iso'] = iso
-            router_id = custom.get('router_id')
-            if router_id:
-                cvars['router_id'] = router_id
-
-        try:
-            roles = role['custom_fields']['netdb_roles']
-        except KeyError:
-            raise NetboxException(None, role, 'no netdb_roles found')
-
-        try:
-            # In the case of sites w/ multiple ASNs, assign first one.
-            cvars['local_asn'] = site['asns'][0]['asn']
-        except:
-            raise NetboxException(None, site, 'Netbox found no ASNs for this site')
-
-        cvars['local_asn'] = site['asns'][0]['asn']
-
-        try:
-            custom = site['custom_fields']
-            entry.update({
-                'location'  : site['region']['display'],
-                'roles'     : roles + custom.get('netdb_roles'),
-                })
-
-        except KeyError:
-            raise NetboxException(None, site, 'Netbox is missing one or more custom fields for this site')
-
-        for i in ['ibgp_ipv4', 'ibgp_ipv6']:
-            ips = bgp_ips.get(name)
-            if ips and i in ips:
-                cvars[i] = ips[i].split('/')[0]
-
-        if name in providers:
-            for provider in providers[name]:
-                if 'providers' not in entry:
-                    entry['providers'] = []
-                entry['providers'].append(provider['slug'])
-
-        # Add netbox metadata
-        entry['datasource'] = netbox.NETBOX_SOURCE['name']
-        entry['weight']     = netbox.NETBOX_SOURCE['weight']
-        entry['meta'] = {
-                'netbox' : {
-                    'id'            :  device_id,
-                    'url'           :  device['url'],
-                    'last_updated'  :  device['last_updated'],
-                    'status'        :  device['status']['value'],
-                    },
-                }
-
-        entry['cvars'] = cvars
-        out[name] = entry
+            cvars = {
+                    'ibgp_ipv4' : _get_ip(device, 'ibgp_ipv4'),
+                    'ibgp_ipv6' : _get_ip(device, 'ibgp_ipv6'),
+                    'iso'       : device['custom_fields']['iso_address'],
+                    'router_id' : device['custom_fields']['router_id'],
+                    'local_asn' : device['site']['asns'][0]['asn'],
+                    }
+            entry['cvars'] = { k : v for k, v in cvars.items() if v }
+            out[ device['name'] ] = entry
 
     return out
 
@@ -529,42 +496,54 @@ def _synchronize_devices(test = True):
     return True if changes else False, changes, message
 
 
-def _synchronize_interfaces(device, interface = None, test = True):
-    netbox_ifaces = { device : _generate_interfaces(device, in_name=interface) }
+def _synchronize_interfaces(devices, test = True):
+    netbox_ifaces = {}
+    netdb_ifaces  = {}
 
-    result, out, message = netdb_validate(_NETDB_IFACE_COLUMN, data = netbox_ifaces)
-    if not result:
-        return result, out, message
+    # Load and validation
+    for device in devices:
+        netbox_ifaces[device] = _generate_interfaces(device)
 
-    result, netdb_ifaces, message = netdb_get(_NETDB_IFACE_COLUMN, data = { 'set_id': device, **_FILTER })
-    if not result:
-        netdb_ifaces = { device : {} }
+        result, out, message = netdb_validate(_NETDB_IFACE_COLUMN, data = netbox_ifaces)
+        if not result:
+            return result, out, message
 
-    changes = {}
+        result, out, message = netdb_get(_NETDB_IFACE_COLUMN, data = { 'set_id': device, **_FILTER })
+        if not result:
+            netdb_ifaces[device] = {}
+        else:
+            netdb_ifaces[device] = out[device]
 
+    all_changes = {}
     adjective = 'required' if test else 'complete'
 
-    for iface, data in netbox_ifaces[device].items():
-        if iface in netdb_ifaces[device].keys():
-            if data != netdb_ifaces[device][iface]:
-                # Update required.
-                changes[iface] = f'update {adjective}'
+    # Apply to netdb
+    for device in devices:
+        changes  = {}
+        for iface, data in netbox_ifaces[device].items():
+            if iface in netdb_ifaces[device].keys():
+                if data != netdb_ifaces[device][iface]:
+                    # Update required.
+                    changes[iface] = f'update {adjective}'
+                    if not test:
+                        netdb_replace(_NETDB_IFACE_COLUMN, data = { device: { iface : data }})
+                netdb_ifaces[device].pop(iface)
+            else:
+                # Addition required
                 if not test:
-                    netdb_replace(_NETDB_IFACE_COLUMN, data = { device: { iface : data }})
-            netdb_ifaces[device].pop(iface)
-        else:
-            # Addition required
-            if not test:
-                netdb_add(_NETDB_IFACE_COLUMN, data = { device: { iface : data }})
-            changes[iface] = f'addition {adjective}'
+                    netdb_add(_NETDB_IFACE_COLUMN, data = { device: { iface : data }})
+                changes[iface] = f'addition {adjective}'
 
-    # Any remaining (unpopped) devices in netdb need to be deleted
-    for iface in netdb_ifaces[device].keys():
-        # Deletion required
-        if not test:
-            filt = { "set_id": device, "element_id": iface, **_FILTER }
-            netdb_delete(_NETDB_IFACE_COLUMN, data = filt)
-        changes[iface] = f'removal from netdb {adjective}'
+        # Any remaining (unpopped) devices in netdb need to be deleted
+        for iface in netdb_ifaces[device].keys():
+            # Deletion required
+            if not test:
+                filt = { "set_id": device, "element_id": iface, **_FILTER }
+                netdb_delete(_NETDB_IFACE_COLUMN, data = filt)
+            changes[iface] = f'removal from netdb {adjective}'
+
+        if changes:
+            all_changes[device] = changes
 
     if not changes:
         message = 'Netdb interfaces already synchronized. No changes made.'
@@ -576,7 +555,7 @@ def _synchronize_interfaces(device, interface = None, test = True):
     if not test:
         logger.info(f'_synchronize_interfaces: {message}')
 
-    return True if changes else False, changes, message
+    return True if all_changes else False, all_changes, message
 
 
 @restful_method(methods = ['GET', 'POST'])
@@ -609,14 +588,16 @@ def synchronize_interfaces(method, data):
     if method == 'POST':
         test = False
 
-    if not data.get('device'):
+    if not ( devices := data.get('devices') ):
         return False, None, 'No device selected'
 
-    device= data.get('device').upper()
-    iface = data.get('interface')
+    if isinstance(devices, str):
+        devices = [ devices ]
+
+    devs = [ i.upper() for i in devices if isinstance(i, str) ]
 
     try:
-        return _synchronize_interfaces(device, interface=iface, test=test)
+        return _synchronize_interfaces(devs, test=test)
     except NetboxException as e:
         return False, e.data, e.message
 
@@ -636,3 +617,11 @@ def generate_interfaces(method, data):
         return False, { 'api_url': e.url, 'code': e.code }, e.message
 
     return True, data, 'Interfaces generated from Netbox datasource for %s' % device
+
+
+@restful_method
+def test(method, data):
+
+    ret = Netbox().gql(netbox.IFACE_GQL % 'SIN2')
+
+    return True, ret, "Test GQL"
