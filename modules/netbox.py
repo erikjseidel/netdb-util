@@ -82,7 +82,7 @@ class Netbox:
     def gql(self, query):
         url = self._BASE + '/graphql/'
         resp = requests.post(url, headers=self._HEADERS, json={"query": query})
-        print(json.dumps(query))
+        logger.debug(f'Netbox.gql: {url} {query}')
 
         if (code := resp.status_code) != 200:
             raise NetboxException(url, resp.json(), code)
@@ -265,7 +265,7 @@ def _generate_devices():
                     'local_asn' : device['site']['asns'][0]['asn'],
                     }
             entry['cvars'] = { k : v for k, v in cvars.items() if v }
-            out[ device['name'] ] = entry
+            out[ device['name'] ] = { k : v for k, v in entry.items() if v }
 
     return out
 
