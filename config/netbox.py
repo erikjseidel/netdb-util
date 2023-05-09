@@ -25,6 +25,7 @@ DEVICE_GQL = """query {
       region {
         name
       }
+      name
       asns {
         asn
       }
@@ -36,7 +37,7 @@ DEVICE_GQL = """query {
       custom_fields
     }
     custom_fields
-    interfaces(type: "dummy") {
+    loopbacks: interfaces(type: "dummy") {
       id
       name
       ip_addresses {
@@ -44,6 +45,26 @@ DEVICE_GQL = """query {
         address
         tags {
           name
+        }
+      }
+    }
+    wan_ports: interfaces(tag: "wan_port") {
+      name
+      l2vpn_terminations {
+        l2vpn {
+          name
+          slug
+        }
+      }
+      link_peers {
+        __typename
+        ... on CircuitTerminationType {
+          circuit {
+            provider {
+              name
+              slug
+            }
+          }
         }
       }
     }
@@ -113,6 +134,15 @@ IFACE_GQL = """query {
         }
       }
     }
+  }
+  config_context_list {
+    id
+    name
+    last_updated
+    tags {
+      name
+    }
+    data
   }
 }"""
 

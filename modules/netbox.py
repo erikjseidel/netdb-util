@@ -7,13 +7,15 @@ from util.netdb import (
         netdb_add, netdb_replace, netdb_delete
         )
 
+from pprint import pprint
+
 # Public symbols
 __all__ = [
         'synchronize_devices',
         'synchronize_interfaces',
         'generate_devices',
         'generate_interfaces',
-        'test',
+        'test1',
         ]
 
 _NETDB_DEV_COLUMN   = 'device'
@@ -105,33 +107,6 @@ class NetboxException(Exception):
         super().__init__(self.message)
 
 
-def _generate_providers():
-    tag = 'wan_port'
-    providers = {}
-
-    nb = Netbox('/dcim/interfaces')
-    for iface in nb.get(tags=tag):
-        device = iface['device']['name']
-        if device not in providers:
-            providers[device] = []
-
-        # Upstreams in cloud providers (such as Vultr) are marked as VXLAN EXPN type
-        # L2VPNs in Netbox.
-        vxlan = iface.get('l2vpn_termination')
-        if vxlan and vxlan['l2vpn'] not in providers[device]:
-            providers[device].append(vxlan['l2vpn'])
-
-        # Physical upstreams (such as MyRepublic) use traditional circuits in Netbox.
-        for link_peer in iface.get('link_peers'):
-            if circuit := link_peer['circuit']:
-                provider = nb.set_url(circuit['url']).get().get('provider')
-
-                if provider and provider not in providers[device]:
-                    providers[device].append(provider)
-
-    return providers
-
-
 def _generate_fw_contexts():
     out = {}
 
@@ -213,7 +188,7 @@ def _generate_devices():
     ret = Netbox().gql(netbox.DEVICE_GQL)
 
     def _get_ip(device, tag):
-        for iface in device['interfaces']:
+        for iface in device['loopbacks']:
             for ip in iface['ip_addresses']:
                 for t in ip['tags']:
                     if t['name'] == tag:
@@ -233,6 +208,26 @@ def _generate_devices():
                 roles.append(i)
 
         return roles
+
+    def _gen_providers(device):
+        providers = []
+
+        for port in device['wan_ports']:
+            # Physical upstreams (such as MyRepublic) use traditional circuits in Netbox.
+            for peer in port['link_peers']:
+                if circuit := peer.get('circuit'):
+                    if provider := circuit.get('provider'):
+                        if ( slug := provider['slug'] ) not in providers:
+                            providers.append(slug)
+
+            # Upstreams in cloud providers (such as Vultr) are marked as VXLAN EXPN type
+            # L2VPNs in Netbox.
+            for termination in port['l2vpn_terminations']:
+                if l2vpn := termination.get('l2vpn'):
+                    if ( slug := l2vpn['slug'] ) not in providers:
+                        providers.append(slug)
+
+        return providers
     
     out = {}
     if ret['data']:
@@ -244,6 +239,7 @@ def _generate_devices():
             entry = {
                     'location'   : device['site']['region']['name'],
                     'roles'      : _gen_roles(device),
+                    'providers'  : _gen_providers(device),
                     'datasource' : netbox.NETBOX_SOURCE['name'],
                     'weight'     : netbox.NETBOX_SOURCE['weight'],
                     }
@@ -620,8 +616,8 @@ def generate_interfaces(method, data):
 
 
 @restful_method
-def test(method, data):
+def test1(method, data):
 
-    ret = Netbox().gql(netbox.IFACE_GQL % 'SIN2')
+    ret = Netbox().gql(netbox.IFACE_GQL % 'SIN1')
 
     return True, ret, "Test GQL"
