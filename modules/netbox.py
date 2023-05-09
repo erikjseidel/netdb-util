@@ -7,8 +7,6 @@ from util.netdb import (
         netdb_add, netdb_replace, netdb_delete
         )
 
-from pprint import pprint
-
 # Public symbols
 __all__ = [
         'synchronize_devices',
