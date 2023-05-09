@@ -15,7 +15,6 @@ __all__ = [
         'synchronize_interfaces',
         'generate_devices',
         'generate_interfaces',
-        'test1',
         ]
 
 _NETDB_DEV_COLUMN   = 'device'
@@ -107,83 +106,6 @@ class NetboxException(Exception):
         super().__init__(self.message)
 
 
-def _generate_fw_contexts():
-    out = {}
-
-    for context in Netbox('/extras/config-contexts').get():
-        for tag in context['tags']:
-            if tag.startswith('fw_') and context['is_active']:
-                if tag in out and out[tag]['weight'] > context['weight']:
-                    continue
-
-                out[tag] = {
-                    'weight' :  context['weight'],
-                    'data'   :  context['data'],
-                    }
-    return out
-
-
-def _generate_device_ips(device_id):
-    out = {}
-
-    for ip in Netbox('/ipam/ip-addresses').get(device_id=device_id):
-        if ip['status']['value'] != 'active':
-            continue
-
-        assert ip['assigned_object']['device']['id'] == device_id
-
-        if (parent := ip['assigned_object']['name']) not in out:
-            out[parent] = []
-
-        entry = {
-            'address'      :  ip['address'],
-            'family'       :  ip['family']['label'],
-            'id'           :  ip['id'],
-            'url'          :  ip['url'],
-            'last_updated' :  ip['last_updated'],
-            }
-
-        if ptr := ip['dns_name']:
-            entry['ptr'] = ptr
-
-        if ip['tags']:
-            tags = [ i['name'] for i in ip['tags'] ]
-            entry['tags'] = tags
-
-        out[parent].append(entry)
-
-    return out
-
-
-def _generate_virtual_links():
-    out = {}
-
-    for link in Netbox('/dcim/virtual-links').get():
-        for end in ['interface_a', 'interface_b']:
-            other = 'interface_b' if end == 'interface_a' else 'interface_a'
-
-            device = link[end]['device']['name']
-            if device not in out:
-                out[device] = {}
-
-            name = link[end]['name']
-            out[device].update({
-                name: {
-                    'status'  : link['status']['value'],
-                    'tags'    : [ i['name'] for i in link['tags'] ],
-                    'peer'    : {
-                        'device'    : link[other]['device']['name'],
-                        'interface' : link[other]['name'],
-                        },
-                    },
-                })
-
-            if key := link['custom_fields']['tunnel_key']:
-                out[device][name]['key'] = key
-
-    return out
-
-
 def _generate_devices():
     ret = Netbox().gql(netbox.DEVICE_GQL)
 
@@ -266,178 +188,161 @@ def _generate_devices():
     return out
 
 
-def _generate_interfaces(device, in_tag=None, in_name=None):
+def _generate_interfaces(device):
+    ret = Netbox().gql(netbox.IFACE_GQL % device)
+
     out = {}
+    if ret['data']:
+        interfaces  = ret['data'].get('interface_list')
+        fw_contexts = ret['data'].get('config_context_list')
 
-    nb = Netbox('/dcim/devices/')
-    try:
-        device_id = nb.get(name=device)[0]['id']
-    except:
-        raise NetboxException(code=404, message='device %s not found in netbox' % device)
+        for interface in interfaces:
+            name = interface['name']
+            type = interface['type']
+            tags = [ i['name'] for i in interface['tags'] ]
 
-    if not ( ifaces_in := nb.set('/dcim/interfaces/').get(device_id=device_id, name=in_name, tags=in_tag) ):
-        raise NetboxException(code=404, message='no matching interfaces found on %s' % device)
+            # Unmanaged interfaces are ignored
+            if 'unmanaged' in tags:
+                continue
 
-    fw_contexts   = _generate_fw_contexts()
-    virtual_links = _generate_virtual_links()
-    device_ips    = { device : _generate_device_ips(device_id) }
-
-    # Used to build lag interfaces
-    device_ifaces = None
-
-    for iface in ifaces_in:
-        name = iface['name']
-
-        iface_tags = [ i['name'] for i in iface['tags'] ]
-
-        # Unmanaged interfaces are ignored
-        if 'unmanaged' in iface_tags:
-            continue
-
-        entry = {}
-
-        type = iface['type']['value']
-        if type in netbox.NETBOX_ETHERNET:
-            entry['type'] = 'ethernet'
-
-        elif type in netbox.NETBOX_NETDB:
-            entry['type'] = type
-
-        elif type == 'lag':
-            entry['type'] = 'lacp'
-
-            lacp =  {
-                    'rate'        : 'fast',
-                    'min_links'   : 1,
-                    'hash_policy' : 'layer2+3',
-                    'members'     : [],
+            meta =  {
+                    'netbox' : {
+                        'id'           : interface['id'],
+                        'last_updated' : interface['last_updated'],
+                        },
                     }
 
-            if 'layer3+4' in iface_tags:
-                lacp['hash_policy'] = 'layer3+4'
-
-            if not device_ifaces:
-                device_ifaces = Netbox('/dcim/interfaces/').get(device_id=device_id)
-
-            for i in device_ifaces:
-                if i['lag'] and i['lag'].get('id') == iface['id']:
-                    lacp['members'].append(i['name'])
-
-            entry['lacp'] = lacp
-
-        elif type == 'vlan':
-            entry['type'] = type
-
-            if not iface['untagged_vlan']:
-                raise NetboxException(
-                        message = '%s %s: untagged VLAN ID is required' % (device, name)
-                        )
-
-            if not iface['parent']:
-                raise NetboxException(
-                        message = '%s %s: parent interface required' % (device, name) 
-                        )
-
-            parent = iface['parent']['name']
-
-            vlan =  {
-                    'id': iface['untagged_vlan']['vid'],
-                    'parent' : parent,
+            entry = {
+                    'meta'        : meta,
+                    'mtu'         : interface['mtu'],
+                    'description' : interface['description'],
+                    'datasource'  : netbox.NETBOX_SOURCE['name'],
+                    'weight'      : netbox.NETBOX_SOURCE['weight'],
                     }
 
-            entry['vlan'] = vlan
+            addrs = {}
+            for address in interface['ip_addresses']:
+                meta =  {
+                        'netbox' : {
+                            'id'           : address['id'],
+                            'last_updated' : address['last_updated'],
+                            },
+                        'tags' : [
+                            i['name']
+                            for i in address['tags']
+                            ],
+                        }
 
-        else:
-            raise NetboxException( message = '%s: invalid type for %s' % (device, name) )
+                if ptr := address['dns_name']:
+                    meta.update({
+                        'dns' : { 'ptr' : ptr }
+                        })
 
-        # if virtual link is not marked as connected then disable.
-        if iface['virtual_link'] and virtual_links[device][name]['status'] != 'connected':
-                out[name]['disabled'] = True
+                addrs[ address['address'] ] = { 'meta' : meta }
 
-        if not iface['enabled']:
-            entry['disabled'] = True
+            entry['address'] = addrs
 
-        for k in ['description', 'mtu']:
-            v = iface.get(k)
-            if v:
-                entry[k] = v
+            if type in netbox.NETBOX_ETHERNET:
+                entry['type'] = 'ethernet'
 
-        if iface['custom_fields']['ttl']:
-            entry['ttl'] = iface['custom_fields']['ttl']
+            elif type == 'DUMMY':
+                entry['type'] = 'dummy'
 
-        if iface['type']['value'] in ['gre', 'l2gre']:
-            # Get source IP and interface for tunnels
-            if iface['parent']:
-                parent =  iface['parent']['name']
-                ips = device_ips[device].get(parent)
-                if ips:
-                    for ip in ips:
-                        if 'tun_src' in ip['tags']:
-                            entry['source'] = ip['address'].split('/')[0]
-                            break
+            elif type == 'LAG':
+                entry['type'] = 'lacp'
 
-                if iface['custom_fields']['bind_parent']:
-                    entry['interface'] = parent
-
-            if iface['link_peers'] and iface['virtual_link']:
-                # there should only ever be one link_peer
-                assert len(iface['link_peers']) == 1
-
-                link_peer = iface['link_peers'][0]
-
-                peer_name  = link_peer['device']['name']
-                peer_iface = link_peer['name']
-
-                # we haven't lazy loaded this device yet
-                if peer_name not in device_ips:
-                    device_ips[peer_name] = _generate_device_ips(link_peer['device']['id'])
-
-                url = link_peer['url']
-                peer_iface_parent = nb.set_url(link_peer['url']).get()['parent']['name']
-
-                for ip in device_ips[peer_name][peer_iface_parent]:
-                    if 'tun_src' in ip['tags']:
-                        entry['remote'] = ip['address'].split('/')[0]
-
-        for ip in (device_ips[device].get(name) or []):
-            addr = ip['address']
-
-            netbox_meta = { 
-                    'id'           : ip['id'],
-                    'url'          : ip['url'],
-                    'last_updated' : ip['last_updated'],
+                lacp =  {
+                        'rate'        : 'fast',
+                        'min_links'   : 1,
+                        'hash_policy' : 'layer2+3',
+                        'members'     : [],
                     }
 
-            meta = { 'netbox': netbox_meta }
+                if min_links := interface['custom_fields']['lacp_min_links']:
+                    entry['lacp']['min_links'] = min_links
 
-            if 'address' not in entry:
-                entry['address'] = {}
-            
-            if 'ptr' in ip:
-                    meta['dns'] = { 'ptr' : ip['ptr'] }
-            if 'tags' in ip:
-                meta['tags'] = ip['tags']
+                if 'layer3+4' in tags:
+                    lacp['hash_policy'] = 'layer3+4'
 
-            entry['address'][addr] = { 'meta': meta }
+                for i in interfaces:
+                    if i['lag'] and i['lag'].get('id') == interface['id']:
+                        lacp['members'].append(i['name'])
 
-        # TBD: Order by v['weight']
-        fw_sets = [ v for k, v in fw_contexts.items() if k in iface_tags ]
+                entry['lacp'] = lacp
 
-        for fw in fw_sets:
-            entry['firewall'] = fw['data']
+            elif type == 'VLAN':
+                entry['type'] = 'vlan'
 
-        # Add netbox metadata
-        entry['datasource'] = netbox.NETBOX_SOURCE['name']
-        entry['weight']     = netbox.NETBOX_SOURCE['weight']
-        entry['meta'] = {
-                'netbox' : {
-                    'id'            :  iface['id'],
-                    'url'           :  iface['url'],
-                    'last_updated'  :  iface['last_updated'],
-                    },
-                }
+                if not interface['untagged_vlan']:
+                    raise NetboxException(
+                            message = '%s %s: untagged VLAN ID is required' % (device, name)
+                            )
 
-        out[name] = entry
+                if not interface['parent']:
+                    raise NetboxException(
+                            message = '%s %s: parent interface required' % (device, name) 
+                            )
+
+                vlan =  {
+                        'id'     : interface['untagged_vlan']['vid'],
+                        'parent' : interface['parent']['name'],
+                        }
+
+                entry['vlan'] = vlan
+
+            elif type in ['GRE', 'L2GRE']:
+                entry['type'] = type.lower()
+
+                if ttl := interface['custom_fields']['ttl']:
+                    entry['ttl'] = ttl
+
+                # Get source IP and interface for tunnels
+                if parent := interface['parent']:
+                    if ips := parent['ip_addresses']:
+                        for ip in ips:
+                            if 'tun_src' in [ i['name'] for i in ip['tags'] ]:
+                                entry['source'] = ip['address'].split('/')[0]
+                                break
+
+                    if interface['custom_fields']['bind_parent']:
+                        entry['interface'] = parent['name']
+
+                # Get GRE remote IP address
+                if vl := interface['virtual_link']:
+                    if vl['interface_a'].get('id') == interface['id']:
+                        peer = vl['interface_b']
+                    else:
+                        peer = vl['interface_a']
+
+                    if parent := peer['parent']:
+                        if ips := parent['ip_addresses']:
+                            for ip in ips:
+                                if 'tun_src' in [ i['name'] for i in ip['tags'] ]:
+                                    entry['remote'] = ip['address'].split('/')[0]
+                                    break
+
+                    # load tunnel key if set
+                    if key := vl['custom_fields']['tunnel_key']:
+                        entry['key'] = key
+
+                    # if virtual link is not marked as connected then disable.
+                    if vl['status'] != 'CONNECTED':
+                        entry['disabled'] = True
+
+            else:
+                print (type)
+                raise NetboxException( message = '%s: invalid type for %s' % (device, name) )
+
+            # Load firewall rules based on tag join on interfaces and config_contexts.
+            # TBD: Order loads by weight.
+            for context in fw_contexts:
+                for tag in tags:
+                    if tag in [ i['name'] for i in context['tags'] ]:
+                        if not entry.get('firewall'):
+                            entry['firewall'] = {}
+                        entry['firewall'].update(json.loads(context['data']))
+
+            out[name] = { k : v for k, v in entry.items() if v }
 
     return out
 
@@ -492,7 +397,7 @@ def _synchronize_devices(test = True):
     return True if changes else False, changes, message
 
 
-def _synchronize_interfaces(devices, test = True):
+def _synchronize_interfaces(devices, test=True):
     netbox_ifaces = {}
     netdb_ifaces  = {}
 
@@ -604,20 +509,11 @@ def generate_interfaces(method, data):
     if not data.get('device'):
         return False, None, 'No device selected'
 
-    device= data.get('device').upper()
-    iface = data.get('interface')
+    device = data.get('device').upper()
 
     try:
-        data = _generate_interfaces(device, in_name=iface)
+        data = _generate_interfaces(device)
     except NetboxException as e:
         return False, { 'api_url': e.url, 'code': e.code }, e.message
 
     return True, data, 'Interfaces generated from Netbox datasource for %s' % device
-
-
-@restful_method
-def test1(method, data):
-
-    ret = Netbox().gql(netbox.IFACE_GQL % 'SIN1')
-
-    return True, ret, "Test GQL"

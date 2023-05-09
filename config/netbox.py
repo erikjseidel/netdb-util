@@ -12,6 +12,16 @@ NETBOX_SOURCE = {
         'weight'  :  150,
         }
 
+NETBOX_ETHERNET = [
+        'VIRTUAL',
+        'VETH',
+        'A_100BASE_TX',
+        'A_1000BASE_T',
+        'A_2_5GBASE_T',
+        'A_5GBASE_T',
+        'A_10GBASE_T',
+        ]
+
 DEVICE_GQL = """query {
   device_list {
     id
@@ -91,13 +101,16 @@ IFACE_GQL = """query {
     }
     last_updated
     ip_addresses {
+      id
       address
       dns_name
+      last_updated
       tags {
         name
       }
     }
     parent {
+      name
       ip_addresses {
         address
         tags {
@@ -107,6 +120,7 @@ IFACE_GQL = """query {
     }
     virtual_link {
       custom_fields
+      status
       interface_a {
         id
         type
@@ -145,53 +159,3 @@ IFACE_GQL = """query {
     data
   }
 }"""
-
-NETBOX_NETDB = [
-        'l2gre',
-        'gre',
-        'dummy',
-        ]
-
-NETBOX_ETHERNET = [
-        'virtual',
-        'veth',
-        '100base-fx',
-        '100base-lfx',
-        '100base-tx',
-        '100base-t1',
-        '1000base-t',
-        '1000base-x-gbic',
-        '1000base-x-sfp',
-        '2.5gbase-t',
-        '5gbase-t',
-        '10gbase-t',
-        '10gbase-cx4',
-        '10gbase-x-sfpp',
-        '10gbase-x-xfp',
-        '10gbase-x-xenpak',
-        '10gbase-x-x2',
-        '25gbase-x-sfp28',
-        '50gbase-x-sfp56',
-        '40gbase-x-qsfpp',
-        '50gbase-x-sfp28',
-        '100gbase-x-cfp',
-        '100gbase-x-cfp2',
-        '100gbase-x-cfp4',
-        '100gbase-x-cpak',
-        '100gbase-x-qsfp28',
-        '200gbase-x-cfp2',
-        '200gbase-x-qsfp56',
-        '400gbase-x-qsfpdd',
-        '400gbase-x-osfp',
-        '800gbase-x-qsfpdd',
-        '800gbase-x-osfp',
-        '1000base-kx',
-        '10gbase-kr',
-        '10gbase-kx4',
-        '25gbase-kr',
-        '40gbase-kr4',
-        '50gbase-kr',
-        '100gbase-kp4',
-        '100gbase-kr2',
-        '100gbase-kr4',
-        ]
