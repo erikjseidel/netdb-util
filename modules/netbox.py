@@ -166,7 +166,7 @@ def _generate_devices():
 
             meta = {
                     'netbox': {
-                        'id'           : device['id'],
+                        'id'           : int(device['id']),
                         'status'       : device['status'],
                         'last_updated' : device['last_updated'],
                         },
@@ -205,7 +205,7 @@ def _generate_interfaces(device):
 
             meta =  {
                     'netbox' : {
-                        'id'           : interface['id'],
+                        'id'           : int(interface['id']),
                         'last_updated' : interface['last_updated'],
                         },
                     }
@@ -222,7 +222,7 @@ def _generate_interfaces(device):
             for address in interface['ip_addresses']:
                 meta =  {
                         'netbox' : {
-                            'id'           : address['id'],
+                            'id'           : int(address['id']),
                             'last_updated' : address['last_updated'],
                             },
                         'tags' : [
