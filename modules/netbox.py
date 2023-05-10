@@ -458,7 +458,8 @@ def _synchronize_interfaces(devices, test=True):
 
 
 @restful_method(methods = ['GET', 'POST'])
-def synchronize_devices(method, data):
+def synchronize_devices(method, data, params):
+    print(params.pop('test', 'none'))
     test = True
     if method == 'POST':
         test = False
@@ -470,7 +471,7 @@ def synchronize_devices(method, data):
 
 
 @restful_method
-def generate_devices(method, data):
+def generate_devices(method, data, params):
     try:
         data = _generate_devices()
 
@@ -482,7 +483,7 @@ def generate_devices(method, data):
 
 
 @restful_method(methods = ['GET', 'POST'])
-def synchronize_interfaces(method, data):
+def synchronize_interfaces(method, data, params):
     test = True
     if method == 'POST':
         test = False
@@ -502,7 +503,7 @@ def synchronize_interfaces(method, data):
 
 
 @restful_method
-def generate_interfaces(method, data):
+def generate_interfaces(method, data, params):
 
     if not data.get('device'):
         return False, None, 'No device selected'

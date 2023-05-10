@@ -13,7 +13,7 @@ __all__ = [ 'report', 'chooser' ]
 _NETDB_COLUMN = 'interface'
 
 @restful_method
-def report(method, data):
+def report(method, data, params):
     """
     Show salt managed IP addresses.
 
@@ -73,7 +73,7 @@ def report(method, data):
 
 
 @restful_method
-def chooser(method, data):
+def chooser(method, data, params):
     """
     Show available prefixes / free IP space within a given (super)prefix.
     In order for this function to by accurate, all IP a space within the

@@ -251,7 +251,7 @@ def _update_cf_records(cf_managed):
 
 
 @restful_method(methods = ['GET', 'POST'])
-def set_cfzone(method, data):
+def set_cfzone(method, data, params):
     entry = {
             'type'     :  'managed_zone',
             'provider' :  'cloudflare',
@@ -282,7 +282,7 @@ def set_cfzone(method, data):
 
 
 @restful_method(methods = ['DELETE'])
-def delete_cfzone(method, data):
+def delete_cfzone(method, data, params):
     prefix = data.get('prefix')
 
     try:
@@ -297,7 +297,7 @@ def delete_cfzone(method, data):
 
 
 @restful_method
-def get_cfzones(method, data):
+def get_cfzones(method, data, params):
     result = _get_cfzones()
 
     if result:
@@ -307,7 +307,7 @@ def get_cfzones(method, data):
 
 
 @restful_method(methods = ['POST'])
-def set_cftoken(method, data):
+def set_cftoken(method, data, params):
     token = data.get('token')
     if not isinstance(token, str):
         return False, None, 'token must be a valid string'
@@ -325,7 +325,7 @@ def set_cftoken(method, data):
 
 
 @restful_method
-def get_ptrs(method, data):
+def get_ptrs(method, data, params):
     """
     Get a list of all PTRs registered in netdb 
 
@@ -335,7 +335,7 @@ def get_ptrs(method, data):
 
 
 @restful_method
-def get_cf(method, data):
+def get_cf(method, data, params):
     _init_cf()
 
     cf_managed = deepcopy(_CF_MANAGED)
@@ -351,7 +351,7 @@ def get_cf(method, data):
 
 
 @restful_method(methods = ['GET', 'POST'])
-def update_cf(method, data):
+def update_cf(method, data, params):
     _init_cf()
 
     result, data, comment = _get_ptrs()

@@ -51,7 +51,7 @@ def api_entry( module = None, endpoint = None ):
         if not isinstance(data, dict):
             return DATA_INVALID
 
-    return method(method=request.method, data=data)
+    return method(method=request.method, data=data, params=request.args.to_dict())
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001, host='0.0.0.0')
