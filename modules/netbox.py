@@ -457,11 +457,10 @@ def _synchronize_interfaces(devices, test=True):
     return True if all_changes else False, all_changes, message
 
 
-@restful_method(methods = ['GET', 'POST'])
+@restful_method
 def synchronize_devices(method, data, params):
-    print(params.pop('test', 'none'))
     test = True
-    if method == 'POST':
+    if params.get('test') in ['false', 'False']:
         test = False
 
     try:
@@ -482,10 +481,10 @@ def generate_devices(method, data, params):
     return True, data, 'Devices generated from Netbox datasource'
 
 
-@restful_method(methods = ['GET', 'POST'])
+@restful_method
 def synchronize_interfaces(method, data, params):
     test = True
-    if method == 'POST':
+    if params.get('test') in ['false', 'False']:
         test = False
 
     if not ( devices := data.get('devices') ):
@@ -504,7 +503,6 @@ def synchronize_interfaces(method, data, params):
 
 @restful_method
 def generate_interfaces(method, data, params):
-
     if not data.get('device'):
         return False, None, 'No device selected'
 

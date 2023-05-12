@@ -1,10 +1,10 @@
-from .secrets import _NETBOX_TOKEN
+from .secrets import NETBOX_TOKEN
 
 NETBOX_BASE = 'http://localhost:8096'
 
 NETBOX_HEADERS = {
             'Content-Type'  : 'application/json',
-            'Authorization' : 'Token ' + _NETBOX_TOKEN,
+            'Authorization' : 'Token ' + NETBOX_TOKEN,
             }        
 
 NETBOX_SOURCE = {

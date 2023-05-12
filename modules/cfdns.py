@@ -7,6 +7,8 @@ from util.netdb      import netdb_get
 from util.query      import DNS_PROJECT
 from util.utildb_api import utilDB
 
+from config.secrets import CFDNS_TOKEN
+
 __all__ = [ 
         'set_cfzone', 
         'delete_cfzone', 
@@ -53,22 +55,12 @@ def _get_cfzones():
             }
 
 
-def _get_cftoken():
-    filt = { "type": "token", "provider": "cloudflare" }
-    result, out, comment = utilDB(_UTIL_COLLECTION).read(filt)
-
-    if not result:
-        return None
-
-    return out[0]['token']
-
-
 def _init_cf():
     global _CF_HEADERS, _CF_MANAGED, _CF_API_PER_PAGE
 
     _CF_HEADERS = {
             'Content-Type'  : 'application/json',
-            'Authorization' : 'Bearer ' + _get_cftoken()
+            'Authorization' : 'Bearer ' + CFDNS_TOKEN
         }
 
     _CF_MANAGED = _get_cfzones()
@@ -250,7 +242,7 @@ def _update_cf_records(cf_managed):
             _cf_delete(name, content['ptr'], content['zone'], content['cf_id'])
 
 
-@restful_method(methods = ['GET', 'POST'])
+@restful_method
 def set_cfzone(method, data, params):
     entry = {
             'type'     :  'managed_zone',
@@ -272,7 +264,7 @@ def set_cfzone(method, data, params):
     except ValueError:
         return False, None, 'invalid prefix'
 
-    if method == 'POST':
+    if params.get('test') in ['false', 'False']:
         filt = { "prefix": entry['prefix'], "type": "managed_zone", "provider": "cloudflare" }
 
         result, out, comment = utilDB(_UTIL_COLLECTION).replace_one(filt, entry)
@@ -306,24 +298,6 @@ def get_cfzones(method, data, params):
         return False, None, 'no cf managed zones found'
 
 
-@restful_method(methods = ['POST'])
-def set_cftoken(method, data, params):
-    token = data.get('token')
-    if not isinstance(token, str):
-        return False, None, 'token must be a valid string'
-
-    entry = {
-            "type"     : "token",
-            "provider" : "cloudflare",
-            "token"    : token,
-            }
-
-    db = utilDB(_UTIL_COLLECTION)
-    filt = { "type": "token", "provider": "cloudflare" }
-
-    return db.replace_one(filt, entry)
-
-
 @restful_method
 def get_ptrs(method, data, params):
     """
@@ -350,7 +324,7 @@ def get_cf(method, data, params):
     return True, cf_managed, 'CF managed PTR Zones'
 
 
-@restful_method(methods = ['GET', 'POST'])
+@restful_method
 def update_cf(method, data, params):
     _init_cf()
 
@@ -366,7 +340,7 @@ def update_cf(method, data, params):
             success = False
             comment = 'All CF managed zones and records up to date.'
 
-        elif method == 'POST':
+        elif params.get('test') in ['false', 'False']:
             _update_cf_records(cf_managed)
             comment = 'Update complere. The CF zones and records listed below have been updated.'
         else:
