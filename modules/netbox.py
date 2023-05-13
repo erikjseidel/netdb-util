@@ -338,7 +338,7 @@ def _generate_interfaces(device):
             # TBD: Order loads by weight.
             for context in fw_contexts:
                 for tag in tags:
-                    if tag in [ i['name'] for i in context['tags'] ]:
+                    if tag.startswith("fw_") and tag in [ i['name'] for i in context['tags'] ]:
                         if not entry.get('firewall'):
                             entry['firewall'] = {}
                         entry['firewall'].update(json.loads(context['data']))
