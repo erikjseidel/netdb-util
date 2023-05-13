@@ -159,3 +159,27 @@ IFACE_GQL = """query {
     data
   }
 }"""
+
+IGP_GQL = """query {
+  device_list {
+    name
+    device_role {
+      id
+    }
+    active: interfaces(tag: "igp") {
+      name   
+    }
+    passive: interfaces(tag: "igp_passive") {
+      name    
+    }
+    custom_fields
+  }
+  config_context_list(tag: "igp") {
+    id
+    name
+    data
+    roles {
+      id
+    }
+  }
+}"""
