@@ -161,7 +161,7 @@ IFACE_GQL = """query {
 }"""
 
 IGP_GQL = """query {
-  device_list {
+  devices: device_list {
     name
     device_role {
       id
@@ -174,9 +174,10 @@ IGP_GQL = """query {
     }
     custom_fields
   }
-  config_context_list(tag: "igp") {
+  contexts: config_context_list(tag: "igp") {
     id
     name
+    last_updated
     data
     roles {
       id

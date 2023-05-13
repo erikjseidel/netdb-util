@@ -11,12 +11,15 @@ from util.netdb import (
 __all__ = [
         'synchronize_devices',
         'synchronize_interfaces',
+        'synchronize_igp',
         'generate_devices',
         'generate_interfaces',
+        'generate_igp',
         ]
 
 _NETDB_DEV_COLUMN   = 'device'
 _NETDB_IFACE_COLUMN = 'interface'
+_NETDB_IGP_COLUMN   = 'igp'
 
 _FILTER = { 'datasource': netbox.NETBOX_SOURCE['name'] }
 
@@ -345,6 +348,64 @@ def _generate_interfaces(device):
     return out
 
 
+def _generate_igp():
+    ret = Netbox().gql(netbox.IGP_GQL)
+
+    out = {}
+    if ret['data']:
+        devices  = ret['data'].get('devices')
+        contexts = ret['data'].get('contexts')
+
+        for device in devices:
+            name = device['name']
+
+            entry = {
+                    'weight'     : netbox.NETBOX_SOURCE['weight'],
+                    'datasource' : netbox.NETBOX_SOURCE['name'],
+                    'meta'       : {}
+                    }
+
+            # Load base config for this device.
+            success = False
+            for context in contexts:
+                for role in context.get('roles'):
+                    if role['id'] == device['device_role'].get('id'):
+                        if data := json.loads(context['data']):
+                            entry.update(data['isis'])
+                            entry['meta']['netbox'] = {
+                                    'name'         : context['name'],
+                                    'last_updated' : context['last_updated'],
+                                    }
+
+                            success = True
+                            break
+
+            # Base config not found for this device.
+            if not success:
+                continue
+
+            interfaces = []
+            for status in ['active', 'passive']:
+                for interface in device[status]:
+                    iface = {
+                            'name' : interface['name'],
+                            }
+                    if status == 'passive':
+                        iface[status] = 'y'
+
+                    interfaces.append(iface)
+
+            isis =  {
+                    'interfaces' : interfaces,
+                    'iso'        : device['custom_fields'].get('iso_address'),
+                    }
+            entry.update(isis)
+
+            out[name] = { 'isis': entry }
+
+    return out
+
+
 def _synchronize_devices(test = True):
     netbox_dev = _generate_devices()
 
@@ -457,6 +518,56 @@ def _synchronize_interfaces(devices, test=True):
     return True if all_changes else False, all_changes, message
 
 
+def _synchronize_igp(test = True):
+    netbox_igp = _generate_igp()
+
+    result, out, message = netdb_validate(_NETDB_IGP_COLUMN, data = netbox_igp)
+    if not result:
+        return result, out, message
+
+    result, netdb_igp, _ = netdb_get(_NETDB_IGP_COLUMN, data = _FILTER)
+    if not result:
+        netdb_igp = {}
+
+    changes = {}
+
+    adjective = 'required' if test else 'complete'
+
+    for device, data in netbox_igp.items():
+        if device in netdb_igp.keys():
+            if data != netdb_igp[device]:
+                # Update required.
+                changes[device] = f'update {adjective}'
+                if not test:
+                    netdb_replace(_NETDB_IGP_COLUMN, data = { device : data })
+            netdb_igp.pop(device)
+        else:
+            # Addition required
+            if not test:
+                netdb_add(_NETDB_IGP_COLUMN, data = { device : data })
+            changes[device] = f'addition {adjective}'
+
+    # Any remaining (unpopped) devices in netdb need to be deleted
+    for device in netdb_igp.keys():
+        # Deletion required
+        if not test:
+            filt = { "id": device, **_FILTER }
+            netdb_delete(_NETDB_IGP_COLUMN, data = filt)
+        changes[device] = f'removal from netdb {adjective}'
+
+    if not changes:
+        message = 'Netdb isis config already synchronized. No changes made.'
+    elif test:
+        message = 'Dry run. No changes made.'
+    else:
+        message = 'Synchronization complete.'
+
+    if not test:
+        logger.info(f'_synchronize_devices: {message}')
+
+    return True if changes else False, changes, message
+
+
 @restful_method
 def synchronize_devices(method, data, params):
     test = True
@@ -514,3 +625,27 @@ def generate_interfaces(method, data, params):
         return False, { 'api_url': e.url, 'code': e.code }, e.message
 
     return True, data, 'Interfaces generated from Netbox datasource for %s' % device
+
+
+@restful_method
+def synchronize_igp(method, data, params):
+    test = True
+    if params.get('test') in ['false', 'False']:
+        test = False
+
+    try:
+        return _synchronize_igp(test)
+    except NetboxException as e:
+        return False, e.data, e.message
+
+
+@restful_method
+def generate_igp(method, data, params):
+    try:
+        data = _generate_igp()
+
+    except NetboxException as e:
+        logger.error(f'exception at netbox.generate_igp: {e.message}', exc_info=e)
+        return False, e.data, e.message
+
+    return True, data, 'IGP configuration generated from Netbox datasource'
