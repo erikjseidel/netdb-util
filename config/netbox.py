@@ -8,7 +8,7 @@ NETBOX_HEADERS = {
             }        
 
 NETBOX_SOURCE = {
-        'name'    :  'netbox-test',
+        'name'    :  'netbox',
         'weight'  :  150,
         }
 
@@ -88,6 +88,7 @@ IFACE_GQL = """query {
     type
     description
     mtu
+    enabled
     custom_fields
     untagged_vlan {
       vid

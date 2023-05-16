@@ -103,4 +103,4 @@ def netdb_delete(column, data):
         raise NetdbException(url, data, 'Invalid netdb response')
 
     if ret.get('error') or not ret['result']:
-        raise NetdbException(url, ret['out'], ret['comment'])
+        raise NetdbException(url, None, ret['comment'])

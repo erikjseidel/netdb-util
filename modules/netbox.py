@@ -202,8 +202,8 @@ def _generate_interfaces(device):
             type = interface['type']
             tags = [ i['name'] for i in interface['tags'] ]
 
-            # Unmanaged interfaces are ignored
-            if 'unmanaged' in tags:
+            # unmanaged / decom tagged interfaces are ignored
+            if 'unmanaged' in tags or 'decom' in tags:
                 continue
 
             meta =  {
@@ -220,6 +220,9 @@ def _generate_interfaces(device):
                     'datasource'  : netbox.NETBOX_SOURCE['name'],
                     'weight'      : netbox.NETBOX_SOURCE['weight'],
                     }
+
+            if not interface['enabled']:
+                entry['disabled'] = True
 
             addrs = {}
             for address in interface['ip_addresses']:
@@ -309,7 +312,11 @@ def _generate_interfaces(device):
                         entry['interface'] = parent['name']
 
                 # Get GRE remote IP address
-                if vl := interface['virtual_link']:
+                if remote := interface['custom_fields'].get('remote_override'):
+                    # The remote_override has been set. Use that.
+                    entry['remote'] = remote
+                elif vl := interface['virtual_link']:
+                    # Otherwise use the tagged interface IP on the other end of the virtual link.
                     if vl['interface_a'].get('id') == interface['id']:
                         peer = vl['interface_b']
                     else:
@@ -494,11 +501,11 @@ def _synchronize_interfaces(devices, test=True):
                     netdb_add(_NETDB_IFACE_COLUMN, data = { device: { iface : data }})
                 changes[iface] = f'addition {adjective}'
 
-        # Any remaining (unpopped) devices in netdb need to be deleted
+        # Any remaining (unpopped) interfaces in netdb need to be deleted
         for iface in netdb_ifaces[device].keys():
             # Deletion required
             if not test:
-                filt = { "set_id": device, "element_id": iface, **_FILTER }
+                filt = { "set_id": [device, iface], **_FILTER }
                 netdb_delete(_NETDB_IFACE_COLUMN, data = filt)
             changes[iface] = f'removal from netdb {adjective}'
 
@@ -551,7 +558,7 @@ def _synchronize_igp(test = True):
     for device in netdb_igp.keys():
         # Deletion required
         if not test:
-            filt = { "id": device, **_FILTER }
+            filt = { "set_id": [device, 'isis'], **_FILTER }
             netdb_delete(_NETDB_IGP_COLUMN, data = filt)
         changes[device] = f'removal from netdb {adjective}'
 
