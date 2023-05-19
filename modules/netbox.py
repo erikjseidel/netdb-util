@@ -224,6 +224,9 @@ def _generate_interfaces(device):
             if not interface['enabled']:
                 entry['disabled'] = True
 
+            if route_policy := interface['custom_fields'].get('route_policy'):
+                entry['policy'] = { 'ipv4' : route_policy, }
+
             addrs = {}
             for address in interface['ip_addresses']:
                 meta =  {
@@ -248,6 +251,10 @@ def _generate_interfaces(device):
 
             if type in netbox.NETBOX_ETHERNET:
                 entry['type'] = 'ethernet'
+                if mac := interface['mac_address']:
+                    entry['mac_address'] = mac.lower()
+                if interface['custom_fields'].get('offload'):
+                    entry['offload'] = True
 
             elif type == 'DUMMY':
                 entry['type'] = 'dummy'

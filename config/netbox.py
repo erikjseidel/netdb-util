@@ -88,6 +88,7 @@ IFACE_GQL = """query {
     type
     description
     mtu
+    mac_address
     enabled
     custom_fields
     untagged_vlan {
