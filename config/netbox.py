@@ -186,3 +186,60 @@ IGP_GQL = """query {
     }
   }
 }"""
+
+EBGP_GQL = """query {
+  devices: device_list {
+    name
+    config_context
+    ebgp_interfaces: interfaces(tag: "ebgp") {
+      id
+      tags {
+        name
+      }
+      virtual_link {
+        interface_a {
+          id
+          name
+          ip_addresses {
+            tags {
+              name
+            }
+            address
+            family {
+              label
+              value
+            }
+          }
+          device {
+            site {
+              asns {
+                asn
+              }
+            }
+          }
+        }
+        interface_b {
+          id
+          name
+          ip_addresses {
+            tags {
+              name
+            }
+            address
+            family {
+              label
+              value
+            }
+          }
+          device {
+            site {
+              asns {
+                asn
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}"""

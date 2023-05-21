@@ -12,14 +12,17 @@ __all__ = [
         'synchronize_devices',
         'synchronize_interfaces',
         'synchronize_igp',
+        'synchronize_ebgp',
         'generate_devices',
         'generate_interfaces',
         'generate_igp',
+        'generate_ebgp',
         ]
 
 _NETDB_DEV_COLUMN   = 'device'
 _NETDB_IFACE_COLUMN = 'interface'
 _NETDB_IGP_COLUMN   = 'igp'
+_NETDB_BGP_COLUMN   = 'bgp'
 
 _FILTER = { 'datasource': netbox.NETBOX_SOURCE['name'] }
 
@@ -420,6 +423,78 @@ def _generate_igp():
     return out
 
 
+def _generate_ebgp():
+    ret = Netbox().gql(netbox.EBGP_GQL)
+
+    out = {}
+    if ret['data']:
+        devices = ret['data'].get('devices')
+
+        for device in devices:
+            device_name = device['name']
+
+            try:
+                bgp_peers = device['config_context']['bgp']['peers']
+            except KeyError:
+                continue
+                
+            neighbors = {}
+            for interface in device['ebgp_interfaces']:
+                iface_tags = [ i['name'] for i in interface['tags'] ]
+
+                # unmanaged / decom tagged interfaces are ignored
+                if 'unmanaged' in iface_tags or 'decom' in iface_tags:
+                    continue
+
+                # "unwired" interfaces are ignored
+                if not (vl := interface.get('virtual_link')):
+                    continue
+
+                if vl['interface_a'].get('id') == interface['id']:
+                    my_iface   = vl['interface_a']
+                    peer_iface = vl['interface_b']
+                else:
+                    my_iface   = vl['interface_b']
+                    peer_iface = vl['interface_a']
+
+                try:
+                    peer_asn = peer_iface['device']['site']['asns'][0]['asn']
+                except KeyError:
+                    # Peer peer_iface or peer_asn not found; ignore this interface.
+                    continue
+
+                if not (bgp_peer := bgp_peers.get(peer_asn)):
+                    if not (bgp_peer := bgp_peers.get(str(peer_asn))):
+                        # No peer entry found in config context; ignore this interface.
+                        continue
+
+                for ip in peer_iface['ip_addresses']:
+                    ip_tags = [ i['name'] for i in ip['tags'] ]
+
+                    if 'prune' in ip_tags or 'decom' in ip_tags:
+                        # IPs marked for removal are ignored.
+                        continue
+
+                    try:
+                        peer_group = bgp_peer[ ip['family']['label'].lower() ]['peer_group']
+                        print(peer_group)
+                    except KeyError:
+                        # No peer group defined for this address family. continue.
+                        continue
+
+                    neighbor = {
+                            'peer_group' : peer_group,
+                            'datasource' : netbox.NETBOX_SOURCE['name'],
+                            'weight'     : netbox.NETBOX_SOURCE['weight'],
+                            }
+                    neighbors[ str(ip['address']).split('/')[0] ] = neighbor
+
+            if neighbors:
+                out[device_name] = {}
+                out[device_name]['neighbors'] = neighbors
+    return out
+
+
 def _synchronize_devices(test = True):
     netbox_dev = _generate_devices()
 
@@ -582,6 +657,63 @@ def _synchronize_igp(test = True):
     return True if changes else False, changes, message
 
 
+def _synchronize_ebgp(test=True):
+    # Load and validation
+    netbox_ebgp = _generate_ebgp()
+
+    result, out, message = netdb_validate(_NETDB_BGP_COLUMN, data = netbox_ebgp)
+    if not result:
+        return result, out, message
+
+    result, netdb_ebgp, _ = netdb_get(_NETDB_BGP_COLUMN, data = _FILTER)
+    if not result:
+        netdb_ebgp = {}
+
+    all_changes = {}
+    adjective = 'required' if test else 'complete'
+
+    # Apply to netdb
+    for device, ebgp_data in netbox_ebgp.items():
+        changes  = {}
+        for neighbor, data in ebgp_data['neighbors'].items():
+            if netdb_ebgp.get(device) and neighbor in netdb_ebgp[device]['neighbors'].keys():
+                if data != netdb_ebgp[device]['neighbors'][neighbor]:
+                    # Update required.
+                    changes[neighbor] = f'update {adjective}'
+                    if not test:
+                        netdb_replace(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
+                netdb_ebgp[device]['neighbors'].pop(neighbor)
+            else:
+                # Addition required
+                if not test:
+                    netdb_add(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
+                changes[neighbor] = f'addition {adjective}'
+
+        # Any remaining (unpopped) interfaces in netdb need to be deleted
+        if netdb_ebgp.get(device):
+            for neighbor in netdb_ebgp[device]['neighbors'].keys():
+                # Deletion required
+                if not test:
+                    filt = { "set_id": [device, 'neighbors', neighbor], **_FILTER }
+                    netdb_delete(_NETDB_BGP_COLUMN, data = filt)
+                changes[neighbor] = f'removal from netdb {adjective}'
+
+        if changes:
+            all_changes[device] = changes
+
+    if not all_changes:
+        message = 'Netdb eBGP sessions already synchronized. No changes made.'
+    elif test:
+        message = 'Dry run. No changes made.'
+    else:
+        message = 'Synchronization complete.'
+
+    if not test:
+        logger.info(f'_synchronize_ebgp: {message}')
+
+    return True if all_changes else False, all_changes, message
+
+
 @restful_method
 def synchronize_devices(method, data, params):
     test = True
@@ -663,3 +795,27 @@ def generate_igp(method, data, params):
         return False, e.data, e.message
 
     return True, data, 'IGP configuration generated from Netbox datasource'
+
+
+@restful_method
+def synchronize_ebgp(method, data, params):
+    test = True
+    if params.get('test') in ['false', 'False']:
+        test = False
+
+    try:
+        return _synchronize_ebgp(test)
+    except NetboxException as e:
+        return False, e.data, e.message
+
+
+@restful_method
+def generate_ebgp(method, data, params):
+    try:
+        data = _generate_ebgp()
+
+    except NetboxException as e:
+        logger.error(f'exception at netbox.generate_ebgp: {e.message}', exc_info=e)
+        return False, e.data, e.message
+
+    return True, data, 'Internal eBGP configuration generated from Netbox datasource'
