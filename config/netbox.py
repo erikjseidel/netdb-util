@@ -1,7 +1,5 @@
 from .secrets import NETBOX_TOKEN
-
-#NETBOX_BASE = 'http://localhost:8096'
-NETBOX_BASE = 'http://10.40.112.3:8096'
+from .secrets import NETBOX_BASE
 
 NETBOX_HEADERS = {
             'Content-Type'  : 'application/json',

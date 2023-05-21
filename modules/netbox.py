@@ -708,7 +708,6 @@ def _synchronize_ebgp(test=True):
                        '_comment': f'removal from netdb {adjective}',
                        }
 
-
         if changes:
             all_changes[device] = {}
             all_changes[device]['neighbors'] = changes
