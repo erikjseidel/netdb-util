@@ -1,6 +1,7 @@
 from .secrets import NETBOX_TOKEN
 
-NETBOX_BASE = 'http://localhost:8096'
+#NETBOX_BASE = 'http://localhost:8096'
+NETBOX_BASE = 'http://10.40.112.3:8096'
 
 NETBOX_HEADERS = {
             'Content-Type'  : 'application/json',
@@ -197,6 +198,7 @@ EBGP_GQL = """query {
         name
       }
       virtual_link {
+        status
         interface_a {
           id
           name

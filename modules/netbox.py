@@ -205,8 +205,8 @@ def _generate_interfaces(device):
             type = interface['type']
             tags = [ i['name'] for i in interface['tags'] ]
 
-            # unmanaged / decom tagged interfaces are ignored
-            if 'unmanaged' in tags or 'decom' in tags:
+            # unmanaged / decom / hypervisor tagged interfaces are ignored
+            if 'unmanaged' in tags or 'decom' in tags or 'hypervisor' in tags:
                 continue
 
             meta =  {
@@ -348,7 +348,6 @@ def _generate_interfaces(device):
                         entry['disabled'] = True
 
             else:
-                print (type)
                 raise NetboxException( message = '%s: invalid type for %s' % (device, name) )
 
             # Load firewall rules based on tag join on interfaces and config_contexts.
@@ -442,12 +441,16 @@ def _generate_ebgp():
             for interface in device['ebgp_interfaces']:
                 iface_tags = [ i['name'] for i in interface['tags'] ]
 
-                # unmanaged / decom tagged interfaces are ignored
-                if 'unmanaged' in iface_tags or 'decom' in iface_tags:
+                # unmanaged / decom / hypervisor tagged interfaces are ignored
+                if 'unmanaged' in iface_tags or 'decom' in iface_tags or 'hypervisor' in iface_tags:
                     continue
 
                 # "unwired" interfaces are ignored
                 if not (vl := interface.get('virtual_link')):
+                    continue
+
+                # if virtual link is not marked as connected then ignore.
+                if vl['status'] != 'CONNECTED':
                     continue
 
                 if vl['interface_a'].get('id') == interface['id']:
@@ -477,7 +480,6 @@ def _generate_ebgp():
 
                     try:
                         peer_group = bgp_peer[ ip['family']['label'].lower() ]['peer_group']
-                        print(peer_group)
                     except KeyError:
                         # No peer group defined for this address family. continue.
                         continue
@@ -679,15 +681,21 @@ def _synchronize_ebgp(test=True):
             if netdb_ebgp.get(device) and neighbor in netdb_ebgp[device]['neighbors'].keys():
                 if data != netdb_ebgp[device]['neighbors'][neighbor]:
                     # Update required.
-                    changes[neighbor] = f'update {adjective}'
                     if not test:
                         netdb_replace(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
+                    changes[neighbor] = {
+                            '_comment': f'update {adjective}',
+                            **data
+                            }
                 netdb_ebgp[device]['neighbors'].pop(neighbor)
             else:
                 # Addition required
                 if not test:
                     netdb_add(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
-                changes[neighbor] = f'addition {adjective}'
+                changes[neighbor] = {
+                        '_comment': f'addition {adjective}',
+                        **data
+                        }
 
         # Any remaining (unpopped) interfaces in netdb need to be deleted
         if netdb_ebgp.get(device):
@@ -696,10 +704,14 @@ def _synchronize_ebgp(test=True):
                 if not test:
                     filt = { "set_id": [device, 'neighbors', neighbor], **_FILTER }
                     netdb_delete(_NETDB_BGP_COLUMN, data = filt)
-                changes[neighbor] = f'removal from netdb {adjective}'
+                changes[neighbor] = {
+                       '_comment': f'removal from netdb {adjective}',
+                       }
+
 
         if changes:
-            all_changes[device] = changes
+            all_changes[device] = {}
+            all_changes[device]['neighbors'] = changes
 
     if not all_changes:
         message = 'Netdb eBGP sessions already synchronized. No changes made.'
