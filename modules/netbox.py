@@ -147,11 +147,7 @@ def _script_runner(script, data={}, sleep_time=5, commit=False):
     # Empty result set means that there was nothing to be done. Return the
     # the relevant log failure / warning message.
     if not out.get('out'):
-        for i in ret['data']['log']:
-            if i['status'] in ['failure', 'warning']:
-                message = i['message']
-
-        return False, None, message
+        return False, None, out['comment']
     if commit:
         return True, out.get('out'), out['comment']
 
