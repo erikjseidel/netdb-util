@@ -1,4 +1,4 @@
-import requests, json, logging
+import requests, json, logging, time, yaml, ipaddress
 from copy import deepcopy
 from util.decorators import restful_method
 from config import netbox
@@ -6,6 +6,8 @@ from util.netdb import (
         NetdbException, netdb_get, netdb_validate, 
         netdb_add, netdb_replace, netdb_delete
         )
+
+from pprint import pprint
 
 # Public symbols
 __all__ = [
@@ -17,6 +19,10 @@ __all__ = [
         'generate_interfaces',
         'generate_igp',
         'generate_ebgp',
+        'update_ptrs',
+        'update_iface_descriptions',
+        'renumber',
+        'prune_ips',
         ]
 
 _NETDB_DEV_COLUMN   = 'device'
@@ -84,6 +90,17 @@ class Netbox:
         return json
 
 
+    def post(self, data):
+        url = self.url
+        logger.debug(f'Netbox.get: {url}')
+        resp = requests.post(url, headers = self._HEADERS, json = data )
+
+        if 'results' in ( js := resp.json() ):
+            return js['results']
+
+        return js['result'] if 'result' in js else js
+
+
     def gql(self, query):
         url = self._BASE + '/graphql/'
         resp = requests.post(url, headers=self._HEADERS, json={"query": query})
@@ -108,6 +125,37 @@ class NetboxException(Exception):
         self.code    = code
         self.message = message
         super().__init__(self.message)
+
+
+def _script_runner(script, data={}, sleep_time=5, commit=False):
+    """ 
+    Used to run netbox scripts, sleep for set number of seconds, and
+    then return output from the job result. 
+
+    Uses data prepared by public methods. Expects yaml formatted output.
+    """
+    nb = Netbox('/extras/scripts/' + script)
+
+    result = nb.post({ 'data': data, 'commit': commit })
+    time.sleep(sleep_time)
+    url = result['url']
+
+    ret = nb.set_url(url).get()
+    pprint(ret)
+    out = yaml.safe_load(ret['data']['output'])
+
+    # Empty result set means that there was nothing to be done. Return the
+    # the relevant log failure / warning message.
+    if not out.get('out'):
+        for i in ret['data']['log']:
+            if i['status'] in ['failure', 'warning']:
+                message = i['message']
+
+        return False, None, message
+    if commit:
+        return True, out.get('out'), out['comment']
+
+    return True, out.get('out'), 'Dry Run: Database changes have been reverted automatically.'
 
 
 def _generate_devices():
@@ -830,3 +878,68 @@ def generate_ebgp(method, data, params):
         return False, e.data, e.message
 
     return True, data, 'Internal eBGP configuration generated from Netbox datasource'
+
+
+@restful_method
+def update_ptrs(method, data, params):
+    commit = False
+    if params.get('test') in ['false', 'False']:
+        commit = True
+
+    return _script_runner('update_ptrs.UpdatePTRs', commit=commit)
+
+
+@restful_method
+def update_iface_descriptions(method, data, params):
+    commit = False
+    if params.get('test') in ['false', 'False']:
+        commit = True
+
+    return _script_runner('update_iface_descriptions.UpdateIfaceDescriptions', commit=commit)
+
+
+@restful_method
+def renumber(method, data, params):
+    commit = False
+    if params.get('test') in ['false', 'False']:
+        commit = True
+
+    # Validate input parameters
+    if not ( ipv4 := params.get('ipv4') ):
+        return False, None, 'IPv4 prefix (ipv4) required'
+    try:
+        ipaddress.IPv4Network(ipv4)
+    except ValueError:
+        return False, None, 'Invald IPv4 prefix'
+
+    if not ( ipv6 := params.get('ipv6') ):
+        return False, None, 'IPv6 prefix (ipv6) required'
+    try:
+        ipaddress.IPv6Network(ipv6)
+    except ValueError:
+        return False, None, 'Invald IPv6 prefix'
+
+    # Get prefix ids from Netbox.
+    result = Netbox('/ipam/prefixes/').get(prefix=ipv4)
+    if len(result) != 1:
+        return False, None, 'IPv4 prefix not found in Netbox'
+    v4_id = result[0]['id']
+
+    result = Netbox('/ipam/prefixes/').get(prefix=ipv6)
+    if len(result) != 1:
+        return False, None, 'IPv6 prefix not found in Netbox'
+    v6_id = result[0]['id']
+
+    # Set data and run the script
+    data = { 'ipv4_prefix': v4_id, 'ipv6_prefix': v6_id }
+
+    return _script_runner('renumber.GenerateNew', data, sleep_time=10, commit=commit)
+
+
+@restful_method
+def prune_ips(method, data, params):
+    commit = False
+    if params.get('test') in ['false', 'False']:
+        commit = True
+
+    return _script_runner('renumber.PruneIPs', commit=commit)
