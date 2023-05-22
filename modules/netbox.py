@@ -7,8 +7,6 @@ from util.netdb import (
         netdb_add, netdb_replace, netdb_delete
         )
 
-from pprint import pprint
-
 # Public symbols
 __all__ = [
         'synchronize_devices',
@@ -141,7 +139,6 @@ def _script_runner(script, data={}, sleep_time=5, commit=False):
     url = result['url']
 
     ret = nb.set_url(url).get()
-    pprint(ret)
     out = yaml.safe_load(ret['data']['output'])
 
     # Empty result set means that there was nothing to be done. Return the
