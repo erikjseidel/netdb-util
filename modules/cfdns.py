@@ -342,7 +342,7 @@ def update_cf(method, data, params):
 
         elif params.get('test') in ['false', 'False']:
             _update_cf_records(cf_managed)
-            comment = 'Update complere. The CF zones and records listed below have been updated.'
+            comment = 'Update complete. The CF zones and records listed below have been updated.'
         else:
             comment = 'List of CF records requiring synchronisation with netdb'
 

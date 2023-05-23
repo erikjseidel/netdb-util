@@ -637,7 +637,7 @@ def _synchronize_interfaces(devices, test=True):
         if changes:
             all_changes[device] = changes
 
-    if not changes:
+    if not all_changes:
         message = 'Netdb interfaces already synchronized. No changes made.'
     elif test:
         message = 'Dry run. No changes made.'
