@@ -261,6 +261,7 @@ def _generate_devices():
             meta = {
                     'netbox': {
                         'id'           : int(device['id']),
+                        'class'        : 'dcim.device',
                         'status'       : device['status'],
                         'last_updated' : device['last_updated'],
                         },
@@ -300,6 +301,7 @@ def _generate_interfaces(device):
             meta =  {
                     'netbox' : {
                         'id'           : int(interface['id']),
+                        'class'        : 'dcim.interface',
                         'last_updated' : interface['last_updated'],
                         },
                     }
@@ -323,6 +325,7 @@ def _generate_interfaces(device):
                 meta =  {
                         'netbox' : {
                             'id'           : int(address['id']),
+                            'class'        : 'dcim.address',
                             'last_updated' : address['last_updated'],
                             },
                         'tags' : [
