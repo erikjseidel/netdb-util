@@ -250,8 +250,10 @@ def _generate_devices():
                     or device['status'].lower() not in ['active', 'staged'] ):
                 continue
 
+            url = f"{netbox.URL_BASE}/dcim/devices/{device['id']}/"
+
             entry = {
-                    'location'   : device['site']['region']['name'],
+                    'location'   : device['site']['region']['slug'],
                     'roles'      : _gen_roles(device),
                     'providers'  : _gen_providers(device),
                     'datasource' : netbox.NETBOX_SOURCE['name'],
@@ -261,7 +263,7 @@ def _generate_devices():
             meta = {
                     'netbox': {
                         'id'           : int(device['id']),
-                        'class'        : 'dcim.device',
+                        'url'          : url,
                         'status'       : device['status'],
                         'last_updated' : device['last_updated'],
                         },
@@ -294,6 +296,8 @@ def _generate_interfaces(device):
             type = interface['type']
             tags = [ i['name'] for i in interface['tags'] ]
 
+            url = f"{netbox.URL_BASE}/dcim/interfaces/{interface['id']}/"
+
             # unmanaged / decom / hypervisor tagged interfaces are ignored
             if 'unmanaged' in tags or 'decom' in tags or 'hypervisor' in tags:
                 continue
@@ -301,7 +305,7 @@ def _generate_interfaces(device):
             meta =  {
                     'netbox' : {
                         'id'           : int(interface['id']),
-                        'class'        : 'dcim.interface',
+                        'url'          : url,
                         'last_updated' : interface['last_updated'],
                         },
                     }
@@ -322,10 +326,12 @@ def _generate_interfaces(device):
 
             addrs = {}
             for address in interface['ip_addresses']:
+                url = f"{netbox.URL_BASE}/ipam/ip-addresses/{address['id']}/"
+
                 meta =  {
                         'netbox' : {
                             'id'           : int(address['id']),
-                            'class'        : 'dcim.address',
+                            'url'          : url,
                             'last_updated' : address['last_updated'],
                             },
                         'tags' : [

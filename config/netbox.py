@@ -1,5 +1,4 @@
-from .secrets import NETBOX_TOKEN
-from .secrets import NETBOX_BASE
+from .secrets import NETBOX_TOKEN, NETBOX_BASE, URL_BASE
 
 NETBOX_HEADERS = {
             'Content-Type'  : 'application/json',
@@ -33,8 +32,8 @@ DEVICE_GQL = """query {
       status
       region {
         name
+        slug
       }
-      name
       asns {
         asn
       }
