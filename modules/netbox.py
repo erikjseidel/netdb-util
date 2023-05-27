@@ -125,9 +125,9 @@ class NetboxException(Exception):
         super().__init__(self.message)
 
 
-def _script_runner(script, data={}, sleep_time=5, commit=False):
+def _script_runner(script, data={}, commit=False):
     """ 
-    Used to run netbox scripts, sleep for set number of seconds, and
+    Used to run netbox scripts, poll the job for set number of seconds, and
     then return output from the job result. 
 
     Uses data prepared by public methods. Expects yaml formatted output.
@@ -135,16 +135,63 @@ def _script_runner(script, data={}, sleep_time=5, commit=False):
     nb = Netbox('/extras/scripts/' + script)
 
     result = nb.post({ 'data': data, 'commit': commit })
-    time.sleep(sleep_time)
-    url = result['url']
 
-    ret = nb.set_url(url).get()
-    out = yaml.safe_load(ret['data']['output'])
+    # Location of the script's job
+    url = result['url']
+    nb.set_url(url)
+
+    # Will continue to poll for 40 seconds before giving up.
+    time_bank = 40
+
+    # Errors tend to return quickly so first poll is after 2 seconds.
+    step = 2
+    out = None
+    while time_bank > 0:
+        time.sleep(step)
+        ret = nb.get()
+        status = ret['status'].get('value')
+
+        if status == 'completed':
+            out = yaml.safe_load(ret['data']['output'])
+            break
+
+        elif status == 'errored':
+            out = {
+                    'result'  : False,
+                    'comment' : 'Netbox script encountered a runtime error',
+                    'out'     : {
+                        script : {
+                            'jid'    : ret.get('job_id'),
+                            'status' : status,
+                            'url'    : url,
+                            }
+                        }
+                    }
+            break
+
+        time_bank -= step
+
+        # Increase polling time to 7 seconds.
+        step = 7
+
+    if not out:
+        out = {
+                'result'  : False,
+                'comment' : 'Netbox script has not yet completed.',
+                'out'     : {
+                    script : {
+                        'jid'    : ret.get('job_id'),
+                        'status' : status,
+                        'url'    : url,
+                        }
+                    }
+                }
 
     # Empty result set means that there was nothing to be done. Return the
     # the relevant log failure / warning message.
-    if not out.get('out'):
-        return False, None, out['comment']
+    if not out.get('result') or not out.get('out'):
+        return False, out.get('out'), out['comment']
+
     if commit:
         return True, out.get('out'), out['comment']
 
@@ -912,21 +959,9 @@ def renumber(method, data, params):
     except ValueError:
         return False, None, 'Invald IPv6 prefix'
 
-    # Get prefix ids from Netbox.
-    result = Netbox('/ipam/prefixes/').get(prefix=ipv4)
-    if len(result) != 1:
-        return False, None, 'IPv4 prefix not found in Netbox'
-    v4_id = result[0]['id']
+    data = { 'ipv4_prefix': ipv4, 'ipv6_prefix': ipv6 }
 
-    result = Netbox('/ipam/prefixes/').get(prefix=ipv6)
-    if len(result) != 1:
-        return False, None, 'IPv6 prefix not found in Netbox'
-    v6_id = result[0]['id']
-
-    # Set data and run the script
-    data = { 'ipv4_prefix': v4_id, 'ipv6_prefix': v6_id }
-
-    return _script_runner('renumber.GenerateNew', data, sleep_time=10, commit=commit)
+    return _script_runner('renumber.GenerateNew', data, commit=commit)
 
 
 @restful_method
