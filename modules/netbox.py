@@ -1,4 +1,4 @@
-import requests, json, logging, time, yaml, ipaddress
+import requests, json, logging, time, yaml, ipaddress, re
 from copy import deepcopy
 from util.decorators import restful_method
 from config import netbox
@@ -29,6 +29,25 @@ _NETDB_IGP_COLUMN   = 'igp'
 _NETDB_BGP_COLUMN   = 'bgp'
 
 _FILTER = { 'datasource': netbox.NETBOX_SOURCE['name'] }
+
+# Supported vyos if types
+_VYOS_VLAN  = "^(eth|bond)([0-9]{1,3})(\.)([0-9]{1,4})$"
+_VYOS_ETH   = "^(eth)([0-9]{1,3})$"
+_VYOS_LAG   = "^(bond)([0-9]{1,3})$"
+_VYOS_TUN   = "^(tun)([0-9]{1,3})$"
+_VYOS_DUM   = "^(dum)([0-9]{1,3})$"
+
+_TYPE_DICT = {
+        'eth'    :  re.compile(_VYOS_ETH),
+        'gre'    :  re.compile(_VYOS_TUN),
+        'l2gre'  :  re.compile(_VYOS_TUN),
+        'vlan'   :  re.compile(_VYOS_VLAN),
+        'lacp'   :  re.compile(_VYOS_LAG),
+        'dummy'  :  re.compile(_VYOS_DUM),
+        }
+
+# Used to verify parent interfaces for tunnels
+_VYOS_PARENT  = "^(eth|bond)([0-9]{1,3})(?:(\.)([0-9]{1,4})){0,1}$"
 
 logger = logging.getLogger(__name__)
 
