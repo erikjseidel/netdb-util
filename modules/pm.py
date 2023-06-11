@@ -105,14 +105,33 @@ class PMException(Exception):
 
 def _generate_direct_sessions():
     sessions = PeeringManager('peering/direct-peering-sessions').get()
+    groups   = { i.pop('id') : i for i in PeeringManager('peering/bgp-groups').get() }
 
     out = {}
     if sessions:
         for session in sessions:
-            if session['status'].get('value') != 'enabled':
+            if ( status := session['status'].get('value') ) == 'disabled':
                 continue
 
+            session_id = int(session['id'])
+
+            group = {}
+            group_id = None
+            if g := session.get('bgp_group'):
+                group = groups[ g['id'] ]
+                group_id = int(g['id'])
+
+                if ( s := group['status'].get('value') ) == 'disabled':
+                    continue
+
+                # a group status of maintenance overrides session status.
+                if s == 'maintenance':
+                    status = s
+
             tags = [ i['name'] for i in session['tags'] ]
+            if group:
+                tags += [ i['name'] for i in group['tags'] ]
+
 
             device = session['router'].get('name')
             ip = session.get('ip_address').split('/')[0]
@@ -122,7 +141,7 @@ def _generate_direct_sessions():
             else:
                 family = 'ipv4'
 
-            url = f"{pm.PM_URL_BASE}/direct-peering-sessions/{session['id']}/"
+            url = f"{pm.PM_URL_BASE}/direct-peering-sessions/{session_id}/"
 
             entry = {
                     'remote_asn' : session['autonomous_system'].get('asn'),
@@ -134,22 +153,37 @@ def _generate_direct_sessions():
                     'weight'     : pm.PM_SOURCE['weight'],
                     }
 
+            if group and ( group_context := group.get('local_context_data') ):
+                if timers := group_context.get('timers'):
+                    entry['timers'] = timers
+
+            if local_context := session.get('local_context_data'):
+                if timers := local_context.get('timers'):
+                    entry['timers'] = timers
+
             addr_fam  = { 'nhs' : 'y'}
             route_map = {}
             for i in ['import_routing_policies', 'export_routing_policies']:
-                if len(session[i]) > 0 and 'reject' not in tags:
+                if 'reject' in tags or status == 'maintenance':
+                    route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
+                elif len(session[i]) > 0:
                     route_map[ i.split('_')[0] ] = session[i][0]['name']
+                elif group and len(group[i]) > 0:
+                    route_map[ i.split('_')[0] ] = group[i][0]['name']
                 else:
                     route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
 
             addr_fam['route_map'] = route_map
 
             meta = {
-                    'id'           : int(session['id']),
+                    'session_id'   : session_id,
                     'url'          : url,
-                    'status'       : session['status'].get('value'),
+                    'status'       : status,
                     'tags'         : tags,
+                    'group'        : group.get('slug'),
+                    'group_id'     : group_id,
                     'comments'     : session.get('comments'),
+                    'type'         : session['relationship'].get('slug'),
                     }
             meta = { k : v for k, v in meta.items() if v }
 
@@ -180,10 +214,15 @@ def _synchronize_direct_sessions(test=True):
     all_changes = {}
     adjective = 'required' if test else 'complete'
 
+    # A somewhat nasty workaround
+    for device in netdb_ebgp.keys():
+        if not pm_sessions.get(device):
+            pm_sessions[device] = {}
+
     # Apply to netdb
     for device, ebgp_data in pm_sessions.items():
         changes  = {}
-        for neighbor, data in ebgp_data['neighbors'].items():
+        for neighbor, data in ebgp_data.get('neighbors', {}).items():
             if netdb_ebgp.get(device) and neighbor in netdb_ebgp[device]['neighbors'].keys():
                 if data != netdb_ebgp[device]['neighbors'][neighbor]:
                     # Update required.
@@ -204,7 +243,7 @@ def _synchronize_direct_sessions(test=True):
                         }
 
         # Any remaining (unpopped) interfaces in netdb need to be deleted
-        if netdb_ebgp.get(device):
+        if device in netdb_ebgp.keys():
             for neighbor in netdb_ebgp[device]['neighbors'].keys():
                 # Deletion required
                 if not test:
