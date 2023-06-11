@@ -145,14 +145,18 @@ def _generate_direct_sessions():
             addr_fam['route_map'] = route_map
 
             meta = {
-                    'peering_manager': {
-                        'id'           : int(session['id']),
-                        'url'          : url,
-                        'status'       : session['status'].get('value'),
-                        },
+                    'id'           : int(session['id']),
+                    'url'          : url,
+                    'status'       : session['status'].get('value'),
+                    'tags'         : tags,
+                    'comments'     : session.get('comments'),
                     }
-            entry['meta'] = meta
-            entry['family'] = { family : addr_fam }
+            meta = { k : v for k, v in meta.items() if v }
+
+            entry.update({
+                'meta'   : { 'peering_manager' : meta },
+                'family' : { family : addr_fam },
+                })
 
             if not out.get(device):
                 out[device] = { 'neighbors' : {} }
