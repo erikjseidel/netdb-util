@@ -112,6 +112,8 @@ def _generate_direct_sessions():
             if session['status'].get('value') != 'enabled':
                 continue
 
+            tags = [ i['name'] for i in session['tags'] ]
+
             device = session['router'].get('name')
             ip = session.get('ip_address').split('/')[0]
 
@@ -135,7 +137,7 @@ def _generate_direct_sessions():
             addr_fam  = { 'nhs' : 'y'}
             route_map = {}
             for i in ['import_routing_policies', 'export_routing_policies']:
-                if len(session[i]) > 0:
+                if len(session[i]) > 0 and 'reject' not in tags:
                     route_map[ i.split('_')[0] ] = session[i][0]['name']
                 else:
                     route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
