@@ -17,6 +17,8 @@ _NETDB_BGP_COLUMN   = 'bgp'
 
 _FILTER = { 'datasource': pm.PM_SOURCE['name'] }
 
+_DEFAULT_REJECT = 'REJECT-ALL'
+
 logger = logging.getLogger(__name__)
 
 class PeeringManager:
@@ -120,9 +122,6 @@ def _generate_direct_sessions():
 
             url = f"{pm.PM_URL_BASE}/direct-peering-sessions/{session['id']}/"
 
-            assert len(session['import_routing_policies']) == 1
-            assert len(session['export_routing_policies']) == 1
-
             entry = {
                     'remote_asn' : session['autonomous_system'].get('asn'),
                     'multihop'   : session.get('multihop_ttl'),
@@ -138,9 +137,10 @@ def _generate_direct_sessions():
             for i in ['import_routing_policies', 'export_routing_policies']:
                 if len(session[i]) > 0:
                     route_map[ i.split('_')[0] ] = session[i][0]['name']
+                else:
+                    route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
 
-            if route_map:
-                addr_fam['route_map'] = route_map
+            addr_fam['route_map'] = route_map
 
             meta = {
                     'peering_manager': {
