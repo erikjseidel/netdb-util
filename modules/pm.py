@@ -9,8 +9,9 @@ from util.netdb import (
 
 # Public symbols
 __all__ = [
-        'synchronize_direct_sessions',
         'generate_direct_sessions',
+        'generate_ixp_sessions',
+        'synchronize_sessions',
         ]
 
 _NETDB_BGP_COLUMN   = 'bgp'
@@ -22,6 +23,9 @@ _DEFAULT_REJECT = 'REJECT-ALL'
 logger = logging.getLogger(__name__)
 
 class PeeringManager:
+    """
+    Simple class for interacting with Peering Manager API.
+    """
     _BASE = pm.PM_BASE
     _HEADERS = pm.PM_HEADERS
     
@@ -137,17 +141,19 @@ def _generate_direct_sessions():
             ip = session.get('ip_address').split('/')[0]
 
             if ipaddress.ip_address(ip).version == 6:
-                family = 'ipv6'
+                family = 6
             else:
-                family = 'ipv4'
+                family = 4
 
             url = f"{pm.PM_URL_BASE}/direct-peering-sessions/{session_id}/"
+
+            source_ip = session.get('local_ip_address')
 
             entry = {
                     'remote_asn' : session['autonomous_system'].get('asn'),
                     'multihop'   : session.get('multihop_ttl'),
                     'password'   : session.get('password'),
-                    'source'     : session.get('local_ip_address').split('/')[0],
+                    'source'     : source_ip.split('/')[0] if source_ip else None,
                     'type'       : 'ebgp',
                     'datasource' : pm.PM_SOURCE['name'],
                     'weight'     : pm.PM_SOURCE['weight'],
@@ -189,7 +195,7 @@ def _generate_direct_sessions():
 
             entry.update({
                 'meta'   : { 'peering_manager' : meta },
-                'family' : { family : addr_fam },
+                'family' : { 'ipv' + str(family) : addr_fam },
                 })
 
             if not out.get(device):
@@ -199,9 +205,122 @@ def _generate_direct_sessions():
     return out
 
 
-def _synchronize_direct_sessions(test=True):
+def _generate_ixp_sessions():
+    # No fancy scripts or graphql in PM so just need to load a lot of stuff.
+    sessions    = PeeringManager('peering/internet-exchange-peering-sessions').get()
+
+    # Turn these into `id' keyed dicts for quick lookups. 
+    connections = { i.pop('id') : i for i in PeeringManager('net/connections').get() }
+    ixps        = { i.pop('id') : i for i in PeeringManager('peering/internet-exchanges').get() }
+    policies    = { i.pop('id') : i for i in PeeringManager('peering/routing-policies').get() }
+
+    out = {}
+    if sessions:
+        for session in sessions:
+            if ( status := session['status'].get('value') ) == 'disabled':
+                continue
+
+            session_id = int(session['id'])
+
+            connection_id = session['ixp_connection']['id']
+            connection = connections.get(connection_id)
+
+            ixp_id = connection['internet_exchange_point']['id']
+            ixp = ixps.get(ixp_id)
+
+            if 'disabled' in [ connection['status'], ixp['status'] ]:
+                continue
+
+            if 'maintenance' in [ session['status'], connection['status'], ixp['status'] ]:
+                status = 'maintenance'
+
+            tags = [ i['name'] for i in (session['tags'] + connection['tags'] + ixp['tags']) ]
+
+            device = connection['router'].get('name')
+            ip = session.get('ip_address').split('/')[0]
+
+            if ipaddress.ip_address(ip).version == 6:
+                family = 6
+            else:
+                family = 4
+
+            # IXP policies for v4 and v6 groups together. We need to tease out the policies
+            # for our family.
+            ixp_policy_ids = {
+                    'import' : [ i['id'] for i in ixp['import_routing_policies'] ],
+                    'export' : [ i['id'] for i in ixp['export_routing_policies'] ],
+                    }
+            ixp_policies = {}
+            for i in ['import_routing_policies', 'export_routing_policies']:
+                ixp_policies[i] = []
+                for j in ixp_policy_ids[ i.split('_')[0] ]:
+                    if policies[j]['address_family'] in [0, family]:
+                        ixp_policies[i].append(policies[j]['name'])
+
+            url = f"{pm.PM_URL_BASE}/internet-exchange-peering-sessions/{session_id}/"
+
+            entry = {
+                    'remote_asn' : session['autonomous_system'].get('asn'),
+                    'password'   : session.get('password'),
+                    'type'       : 'ebgp',
+                    'datasource' : pm.PM_SOURCE['name'],
+                    'weight'     : pm.PM_SOURCE['weight'],
+                    }
+
+            for g in [ session, connection, ixp ]:
+                if context := g.get('local_context_data'):
+                    if timers := context.get('timers'):
+                        entry['timers'] = timers
+
+            addr_fam  = { 'nhs' : 'y'}
+            route_map = {}
+            for i in ['import_routing_policies', 'export_routing_policies']:
+                if 'reject' in tags or status == 'maintenance':
+                    route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
+                elif len(session[i]) > 0:
+                    route_map[ i.split('_')[0] ] = session[i][0]['name']
+                elif len(ixp_policies[i]) > 0:
+                    route_map[ i.split('_')[0] ] = ixp_policies[i][0]
+                else:
+                    route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
+
+            addr_fam['route_map'] = route_map
+
+            meta = {
+                    'session_id'    : session_id,
+                    'url'           : url,
+                    'status'        : status,
+                    'tags'          : tags,
+                    'ixp'           : ixp.get('slug'),
+                    'ixp_id'        : ixp_id,
+                    'connection_id' : ixp_id,
+                    'comments'      : session.get('comments'),
+                    'type'          : 'ixp-session',
+                    }
+            meta = { k : v for k, v in meta.items() if v }
+
+            entry.update({
+                'meta'   : { 'peering_manager' : meta },
+                'family' : { 'ipv' + str(family) : addr_fam },
+                })
+
+            if not out.get(device):
+                out[device] = { 'neighbors' : {} }
+            out[device]['neighbors'][ip] = { k : v for k, v in entry.items() if v }
+
+    return out
+
+
+def _synchronize_sessions(test=True):
     # Load and validation
-    pm_sessions = _generate_direct_sessions()
+    pm_sessions = _generate_ixp_sessions()
+     
+    # Pull direct sessions and merge them on top of IXP sessions.
+    for session, neighbors in _generate_direct_sessions().items():
+        if not pm_sessions.get(session):
+            pm_sessions[session] = { 'neighbors' : {} }
+        for neighbor, bgp_data in neighbors.get('neighbors').items():
+            pm_sessions[session]['neighbors'][neighbor] = bgp_data
 
     result, out, message = netdb_validate(_NETDB_BGP_COLUMN, data = pm_sessions)
     if not result:
@@ -211,13 +330,14 @@ def _synchronize_direct_sessions(test=True):
     if not result:
         netdb_ebgp = {}
 
-    all_changes = {}
-    adjective = 'required' if test else 'complete'
-
-    # A somewhat nasty workaround
+    # A somewhat nasty workaround. If all neighbors removed from PM router make sure they
+    # are still processed by the deletion.
     for device in netdb_ebgp.keys():
         if not pm_sessions.get(device):
             pm_sessions[device] = {}
+
+    all_changes = {}
+    adjective = 'required' if test else 'complete'
 
     # Apply to netdb
     for device, ebgp_data in pm_sessions.items():
@@ -283,12 +403,24 @@ def generate_direct_sessions(method, data, params):
 
 
 @restful_method
-def synchronize_direct_sessions(method, data, params):
+def generate_ixp_sessions(method, data, params):
+    try:
+        data = _generate_ixp_sessions()
+
+    except PMException as e:
+        logger.error(f'exception at pm.generate_ixp_sessions: {e.message}', exc_info=e)
+        return False, e.data, e.message
+
+    return True, data, 'eBGP IXP sessions generated from Peering Manager datasource'
+
+
+@restful_method
+def synchronize_sessions(method, data, params):
     test = True
     if params.get('test') in ['false', 'False']:
         test = False
 
     try:
-        return _synchronize_direct_sessions(test)
+        return _synchronize_sessions(test)
     except PMException as e:
         return False, e.data, e.message
