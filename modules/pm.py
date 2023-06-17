@@ -10,7 +10,9 @@ from util.netdb import (
 # Public symbols
 __all__ = [
         'generate_direct_sessions',
+        'generate_direct_session',
         'generate_ixp_sessions',
+        'generate_ixp_session',
         'synchronize_sessions',
         ]
 
@@ -73,7 +75,7 @@ class PeeringManager:
         logger.debug(f'PM.get: {url}')
         resp = requests.get(url, headers = self._HEADERS)
         
-        if (code := resp.status_code) != 200:
+        if (code := resp.status_code) not in [200, 404]:
             raise PMException(url, resp.json(), code)
 
         if 'results' in ( json := resp.json() ):
@@ -322,6 +324,22 @@ def _generate_direct_sessions():
     return out
 
 
+def _generate_direct_session(id):
+    session = PeeringManager(f'peering/direct-peering-sessions/{id}/').get()
+    groups   = { i.pop('id') : i for i in PeeringManager('peering/bgp-groups').get() }
+
+    out = {}
+    if session.get('id'):
+        result = _generate_direct_session_base(session, groups)
+        if not result:
+            return None
+
+        out[ result['device'] ] = { 'neighbors' : {} }
+        out[ result['device'] ]['neighbors'][ result['ip'] ] = result['data']
+
+    return out
+
+
 def _generate_ixp_sessions():
     # No fancy scripts or graphql in PM so just need to load a lot of stuff.
     sessions    = PeeringManager('peering/internet-exchange-peering-sessions').get()
@@ -341,6 +359,25 @@ def _generate_ixp_sessions():
             if not out.get(result['device']):
                 out[ result['device'] ] = { 'neighbors' : {} }
             out[ result['device'] ]['neighbors'][ result['ip'] ] = result['data']
+
+    return out
+
+
+def _generate_ixp_session(id):
+    session = PeeringManager(f'peering/internet-exchange-peering-sessions/{id}/').get()
+
+    connections = { i.pop('id') : i for i in PeeringManager('net/connections').get() }
+    ixps        = { i.pop('id') : i for i in PeeringManager('peering/internet-exchanges').get() }
+    policies    = { i.pop('id') : i for i in PeeringManager('peering/routing-policies').get() }
+
+    out = {}
+    if session.get('id'):
+        result = _generate_ixp_session_base(session, connections, ixps, policies)
+        if not result:
+            return None
+
+        out[ result['device'] ] = { 'neighbors' : {} }
+        out[ result['device'] ]['neighbors'][ result['ip'] ] = result['data']
 
     return out
 
@@ -437,6 +474,25 @@ def generate_direct_sessions(method, data, params):
 
 
 @restful_method
+def generate_direct_session(method, data, params):
+    if not ( id := params.get('id') ):
+        return False, None, 'id parameter required'
+
+    try:
+        data = _generate_direct_session(id)
+
+    except PMException as e:
+        logger.error(f'exception at pm.generate_direct_session: {e.message}', exc_info=e)
+        return False, e.data, e.message
+
+    msg = f'eBGP direct session {id} not found'
+    if data:
+        msg = 'eBGP direct session generated from Peering Manager datasource'
+
+    return bool(data), data, msg
+
+
+@restful_method
 def generate_ixp_sessions(method, data, params):
     try:
         data = _generate_ixp_sessions()
@@ -446,6 +502,25 @@ def generate_ixp_sessions(method, data, params):
         return False, e.data, e.message
 
     return True, data, 'eBGP IXP sessions generated from Peering Manager datasource'
+
+
+@restful_method
+def generate_ixp_session(method, data, params):
+    if not ( id := params.get('id') ):
+        return False, None, 'id parameter required'
+
+    try:
+        data = _generate_ixp_session(id)
+
+    except PMException as e:
+        logger.error(f'exception at pm.generate_ixp_session: {e.message}', exc_info=e)
+        return False, e.data, e.message
+
+    msg = f'eBGP IXP session {id} not found'
+    if data:
+        msg = 'eBGP IXP session generated from Peering Manager datasource'
+
+    return bool(data), data, msg
 
 
 @restful_method
