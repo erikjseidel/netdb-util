@@ -92,6 +92,17 @@ class PeeringManager:
         return js['result'] if 'result' in js else js
 
 
+    def patch(self, data):
+        url = self.url
+        logger.debug(f'PM.patch: {url}')
+        resp = requests.patch(url, headers = self._HEADERS, json = data )
+
+        if 'results' in ( js := resp.json() ):
+            return js['results']
+
+        return js['result'] if 'result' in js else js
+
+
 class PMException(Exception):
     """Exception raised for failed / unexpected netbox API calls / results
 
@@ -107,6 +118,192 @@ class PMException(Exception):
         super().__init__(self.message)
 
 
+def _generate_direct_session_base(session, groups):
+    if ( status := session['status'].get('value') ) == 'disabled':
+        return None
+
+    session_id = int(session['id'])
+
+    group = {}
+    group_id = None
+    if g := session.get('bgp_group'):
+        group = groups[ g['id'] ]
+        group_id = int(g['id'])
+
+        if ( s := group['status'].get('value') ) == 'disabled':
+            return None
+
+        # a group status of maintenance overrides session status.
+        if s == 'maintenance':
+            status = s
+
+    tags = [ i['name'] for i in session['tags'] ]
+    if group:
+        tags += [ i['name'] for i in group['tags'] ]
+
+    device = session['router'].get('name')
+    ip = session.get('ip_address').split('/')[0]
+
+    if ipaddress.ip_address(ip).version == 6:
+        family = 6
+    else:
+        family = 4
+
+    url = f"{pm.PM_URL_BASE}/direct-peering-sessions/{session_id}/"
+
+    source_ip = session.get('local_ip_address')
+
+    entry = {
+            'remote_asn' : session['autonomous_system'].get('asn'),
+            'multihop'   : session.get('multihop_ttl'),
+            'password'   : session.get('password'),
+            'source'     : source_ip.split('/')[0] if source_ip else None,
+            'type'       : 'ebgp',
+            'datasource' : pm.PM_SOURCE['name'],
+            'weight'     : pm.PM_SOURCE['weight'],
+             }
+
+    if group and ( group_context := group.get('local_context_data') ):
+        if timers := group_context.get('timers'):
+            entry['timers'] = timers
+
+    if local_context := session.get('local_context_data'):
+        if timers := local_context.get('timers'):
+            entry['timers'] = timers
+
+    addr_fam  = { 'nhs' : 'y'}
+    route_map = {}
+    for i in ['import_routing_policies', 'export_routing_policies']:
+        if 'reject' in tags or status == 'maintenance':
+            route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
+        elif len(session[i]) > 0:
+            route_map[ i.split('_')[0] ] = session[i][0]['name']
+        elif group and len(group[i]) > 0:
+            route_map[ i.split('_')[0] ] = group[i][0]['name']
+        else:
+            route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
+
+    addr_fam['route_map'] = route_map
+
+    meta = {
+            'session_id'   : session_id,
+            'url'          : url,
+            'status'       : status,
+            'tags'         : tags,
+            'group'        : group.get('slug'),
+            'group_id'     : group_id,
+            'comments'     : session.get('comments'),
+            'type'         : session['relationship'].get('slug'),
+            }
+    meta = { k : v for k, v in meta.items() if v }
+
+    entry.update({
+        'meta'   : { 'peering_manager' : meta },
+        'family' : { 'ipv' + str(family) : addr_fam },
+        })
+
+    return {
+            'device' : device,
+            'ip'     : ip,
+            'data'   : { k : v for k, v in entry.items() if v },
+            }
+
+
+def _generate_ixp_session_base(session, connections, ixps, policies):
+    if ( status := session['status'].get('value') ) == 'disabled':
+        return None
+
+    session_id = int(session['id'])
+
+    connection_id = session['ixp_connection']['id']
+    connection = connections.get(connection_id)
+
+    ixp_id = connection['internet_exchange_point']['id']
+    ixp = ixps.get(ixp_id)
+
+    if 'disabled' in [ connection['status'], ixp['status'] ]:
+        return None
+
+    if 'maintenance' in [ session['status'], connection['status'], ixp['status'] ]:
+        status = 'maintenance'
+
+    tags = [ i['name'] for i in (session['tags'] + connection['tags'] + ixp['tags']) ]
+
+    device = connection['router'].get('name')
+    ip = session.get('ip_address').split('/')[0]
+
+    if ipaddress.ip_address(ip).version == 6:
+        family = 6
+    else:
+        family = 4
+
+    # IXP policies for v4 and v6 groups together. We need to tease out the policies
+    # for our family.
+    ixp_policy_ids = {
+            'import' : [ i['id'] for i in ixp['import_routing_policies'] ],
+            'export' : [ i['id'] for i in ixp['export_routing_policies'] ],
+            }
+    ixp_policies = {}
+    for i in ['import_routing_policies', 'export_routing_policies']:
+        ixp_policies[i] = []
+        for j in ixp_policy_ids[ i.split('_')[0] ]:
+            if policies[j]['address_family'] in [0, family]:
+                ixp_policies[i].append(policies[j]['name'])
+
+    url = f"{pm.PM_URL_BASE}/internet-exchange-peering-sessions/{session_id}/"
+
+    entry = {
+            'remote_asn' : session['autonomous_system'].get('asn'),
+            'password'   : session.get('password'),
+            'type'       : 'ebgp',
+            'datasource' : pm.PM_SOURCE['name'],
+            'weight'     : pm.PM_SOURCE['weight'],
+            }
+
+    for g in [ session, connection, ixp ]:
+        if context := g.get('local_context_data'):
+            if timers := context.get('timers'):
+                entry['timers'] = timers
+
+    addr_fam  = { 'nhs' : 'y'}
+    route_map = {}
+    for i in ['import_routing_policies', 'export_routing_policies']:
+        if 'reject' in tags or status == 'maintenance':
+            route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
+        elif len(session[i]) > 0:
+            route_map[ i.split('_')[0] ] = session[i][0]['name']
+        elif len(ixp_policies[i]) > 0:
+            route_map[ i.split('_')[0] ] = ixp_policies[i][0]
+        else:
+            route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
+
+    addr_fam['route_map'] = route_map
+
+    meta = {
+            'session_id'    : session_id,
+            'url'           : url,
+            'status'        : status,
+            'tags'          : tags,
+            'ixp'           : ixp.get('slug'),
+            'ixp_id'        : ixp_id,
+            'connection_id' : ixp_id,
+            'comments'      : session.get('comments'),
+            'type'          : 'ixp-session',
+            }
+    meta = { k : v for k, v in meta.items() if v }
+
+    entry.update({
+        'meta'   : { 'peering_manager' : meta },
+        'family' : { 'ipv' + str(family) : addr_fam },
+        })
+
+    return {
+            'device' : device,
+            'ip'     : ip,
+            'data'   : { k : v for k, v in entry.items() if v },
+            }
+
+
 def _generate_direct_sessions():
     sessions = PeeringManager('peering/direct-peering-sessions').get()
     groups   = { i.pop('id') : i for i in PeeringManager('peering/bgp-groups').get() }
@@ -114,93 +311,13 @@ def _generate_direct_sessions():
     out = {}
     if sessions:
         for session in sessions:
-            if ( status := session['status'].get('value') ) == 'disabled':
+            result = _generate_direct_session_base(session, groups)
+            if not result:
                 continue
 
-            session_id = int(session['id'])
-
-            group = {}
-            group_id = None
-            if g := session.get('bgp_group'):
-                group = groups[ g['id'] ]
-                group_id = int(g['id'])
-
-                if ( s := group['status'].get('value') ) == 'disabled':
-                    continue
-
-                # a group status of maintenance overrides session status.
-                if s == 'maintenance':
-                    status = s
-
-            tags = [ i['name'] for i in session['tags'] ]
-            if group:
-                tags += [ i['name'] for i in group['tags'] ]
-
-
-            device = session['router'].get('name')
-            ip = session.get('ip_address').split('/')[0]
-
-            if ipaddress.ip_address(ip).version == 6:
-                family = 6
-            else:
-                family = 4
-
-            url = f"{pm.PM_URL_BASE}/direct-peering-sessions/{session_id}/"
-
-            source_ip = session.get('local_ip_address')
-
-            entry = {
-                    'remote_asn' : session['autonomous_system'].get('asn'),
-                    'multihop'   : session.get('multihop_ttl'),
-                    'password'   : session.get('password'),
-                    'source'     : source_ip.split('/')[0] if source_ip else None,
-                    'type'       : 'ebgp',
-                    'datasource' : pm.PM_SOURCE['name'],
-                    'weight'     : pm.PM_SOURCE['weight'],
-                    }
-
-            if group and ( group_context := group.get('local_context_data') ):
-                if timers := group_context.get('timers'):
-                    entry['timers'] = timers
-
-            if local_context := session.get('local_context_data'):
-                if timers := local_context.get('timers'):
-                    entry['timers'] = timers
-
-            addr_fam  = { 'nhs' : 'y'}
-            route_map = {}
-            for i in ['import_routing_policies', 'export_routing_policies']:
-                if 'reject' in tags or status == 'maintenance':
-                    route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
-                elif len(session[i]) > 0:
-                    route_map[ i.split('_')[0] ] = session[i][0]['name']
-                elif group and len(group[i]) > 0:
-                    route_map[ i.split('_')[0] ] = group[i][0]['name']
-                else:
-                    route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
-
-            addr_fam['route_map'] = route_map
-
-            meta = {
-                    'session_id'   : session_id,
-                    'url'          : url,
-                    'status'       : status,
-                    'tags'         : tags,
-                    'group'        : group.get('slug'),
-                    'group_id'     : group_id,
-                    'comments'     : session.get('comments'),
-                    'type'         : session['relationship'].get('slug'),
-                    }
-            meta = { k : v for k, v in meta.items() if v }
-
-            entry.update({
-                'meta'   : { 'peering_manager' : meta },
-                'family' : { 'ipv' + str(family) : addr_fam },
-                })
-
-            if not out.get(device):
-                out[device] = { 'neighbors' : {} }
-            out[device]['neighbors'][ip] = { k : v for k, v in entry.items() if v }
+            if not out.get(result['device']):
+                out[ result['device'] ] = { 'neighbors' : {} }
+            out[ result['device'] ]['neighbors'][ result['ip'] ] = result['data']
 
     return out
 
@@ -217,96 +334,13 @@ def _generate_ixp_sessions():
     out = {}
     if sessions:
         for session in sessions:
-            if ( status := session['status'].get('value') ) == 'disabled':
+            result = _generate_ixp_session_base(session, connections, ixps, policies)
+            if not result:
                 continue
 
-            session_id = int(session['id'])
-
-            connection_id = session['ixp_connection']['id']
-            connection = connections.get(connection_id)
-
-            ixp_id = connection['internet_exchange_point']['id']
-            ixp = ixps.get(ixp_id)
-
-            if 'disabled' in [ connection['status'], ixp['status'] ]:
-                continue
-
-            if 'maintenance' in [ session['status'], connection['status'], ixp['status'] ]:
-                status = 'maintenance'
-
-            tags = [ i['name'] for i in (session['tags'] + connection['tags'] + ixp['tags']) ]
-
-            device = connection['router'].get('name')
-            ip = session.get('ip_address').split('/')[0]
-
-            if ipaddress.ip_address(ip).version == 6:
-                family = 6
-            else:
-                family = 4
-
-            # IXP policies for v4 and v6 groups together. We need to tease out the policies
-            # for our family.
-            ixp_policy_ids = {
-                    'import' : [ i['id'] for i in ixp['import_routing_policies'] ],
-                    'export' : [ i['id'] for i in ixp['export_routing_policies'] ],
-                    }
-            ixp_policies = {}
-            for i in ['import_routing_policies', 'export_routing_policies']:
-                ixp_policies[i] = []
-                for j in ixp_policy_ids[ i.split('_')[0] ]:
-                    if policies[j]['address_family'] in [0, family]:
-                        ixp_policies[i].append(policies[j]['name'])
-
-            url = f"{pm.PM_URL_BASE}/internet-exchange-peering-sessions/{session_id}/"
-
-            entry = {
-                    'remote_asn' : session['autonomous_system'].get('asn'),
-                    'password'   : session.get('password'),
-                    'type'       : 'ebgp',
-                    'datasource' : pm.PM_SOURCE['name'],
-                    'weight'     : pm.PM_SOURCE['weight'],
-                    }
-
-            for g in [ session, connection, ixp ]:
-                if context := g.get('local_context_data'):
-                    if timers := context.get('timers'):
-                        entry['timers'] = timers
-
-            addr_fam  = { 'nhs' : 'y'}
-            route_map = {}
-            for i in ['import_routing_policies', 'export_routing_policies']:
-                if 'reject' in tags or status == 'maintenance':
-                    route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
-                elif len(session[i]) > 0:
-                    route_map[ i.split('_')[0] ] = session[i][0]['name']
-                elif len(ixp_policies[i]) > 0:
-                    route_map[ i.split('_')[0] ] = ixp_policies[i][0]
-                else:
-                    route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
-
-            addr_fam['route_map'] = route_map
-
-            meta = {
-                    'session_id'    : session_id,
-                    'url'           : url,
-                    'status'        : status,
-                    'tags'          : tags,
-                    'ixp'           : ixp.get('slug'),
-                    'ixp_id'        : ixp_id,
-                    'connection_id' : ixp_id,
-                    'comments'      : session.get('comments'),
-                    'type'          : 'ixp-session',
-                    }
-            meta = { k : v for k, v in meta.items() if v }
-
-            entry.update({
-                'meta'   : { 'peering_manager' : meta },
-                'family' : { 'ipv' + str(family) : addr_fam },
-                })
-
-            if not out.get(device):
-                out[device] = { 'neighbors' : {} }
-            out[device]['neighbors'][ip] = { k : v for k, v in entry.items() if v }
+            if not out.get(result['device']):
+                out[ result['device'] ] = { 'neighbors' : {} }
+            out[ result['device'] ]['neighbors'][ result['ip'] ] = result['data']
 
     return out
 

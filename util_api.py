@@ -54,4 +54,4 @@ def api_entry( module = None, endpoint = None ):
     return method(method=request.method, data=data, params=request.args.to_dict())
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001, host='0.0.0.0')
+    app.run(debug=True, port=8002, host='0.0.0.0')
