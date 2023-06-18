@@ -627,7 +627,7 @@ def generate_session(method, data, params):
     device = params.get('device')
     ip = params.get('ip')
 
-    if not (device or ip):
+    if not (device and ip):
         return False, None, 'device and ip parameters required'
 
     try:
@@ -661,7 +661,7 @@ def synchronize_session(method, data, params):
     device = params.get('device')
     ip = params.get('ip')
 
-    if not (device or ip):
+    if not (device and ip):
         return False, None, 'device and ip parameters required'
 
     test = True
@@ -680,7 +680,7 @@ def set_status(method, data, params):
     ip = params.get('ip')
     status = params.get('status')
 
-    if not (device or ip):
+    if not (device and ip):
         return False, None, 'device and ip parameters required'
 
     try:
