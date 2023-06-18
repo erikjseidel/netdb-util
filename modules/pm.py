@@ -13,6 +13,7 @@ __all__ = [
         'generate_ixp_sessions',
         'generate_session',
         'synchronize_sessions',
+        'synchronize_session',
         ]
 
 _NETDB_BGP_COLUMN   = 'bgp'
@@ -509,6 +510,65 @@ def _synchronize_sessions(test=True):
     return True if all_changes else False, all_changes, message
 
 
+def _synchronize_session(device, ip, test=True):
+    # Load and validation
+    pm_session = _generate_session(device, ip)
+
+    result, netdb_ebgp, _ = netdb_get(_NETDB_BGP_COLUMN, data = _FILTER)
+    if not netdb_ebgp.get(device):
+        data = None
+    else:
+        data = netdb_ebgp[device]['neighbors'].get(ip)
+
+    adjective = 'required' if test else 'complete'
+
+    change = None
+    if pm_session:
+        result, out, message = netdb_validate(_NETDB_BGP_COLUMN, data = pm_session)
+        if not result:
+            return result, out, message
+
+        if data:
+            if data != pm_session[device]['neighbors'][ip]:
+                # Update required.
+                if not test:
+                    netdb_replace(_NETDB_BGP_COLUMN, data = pm_session)
+                change = {
+                        '_comment': f'update {adjective}',
+                        **pm_session
+                        }
+
+        else:
+            # Addition required
+            if not test:
+                netdb_add(_NETDB_BGP_COLUMN, data = pm_session)
+            change = {
+                    '_comment': f'addition {adjective}',
+                    **pm_session
+                    }
+
+    elif data:
+        # Deletion required
+        if not test:
+            filt = { "set_id": [device, 'neighbors', ip], **_FILTER }
+            netdb_delete(_NETDB_BGP_COLUMN, data = filt)
+        change = {
+               '_comment': f'removal from netdb {adjective}',
+               }
+
+    if not change:
+        message = 'Netdb eBGP session already synchronized. No changes made.'
+    elif test:
+        message = 'Dry run. No changes made.'
+    else:
+        message = 'Synchronization complete.'
+
+    if not test:
+        logger.info(f'_synchronize_ebgp: {message}')
+
+    return True if change else False, change, message
+
+
 @restful_method
 def generate_direct_sessions(method, data, params):
     try:
@@ -563,5 +623,23 @@ def synchronize_sessions(method, data, params):
 
     try:
         return _synchronize_sessions(test)
+    except PMException as e:
+        return False, e.data, e.message
+
+
+@restful_method
+def synchronize_session(method, data, params):
+    device = params.get('device')
+    ip = params.get('ip')
+
+    if not (device or ip):
+        return False, None, 'device and ip parameters required'
+
+    test = True
+    if params.get('test') in ['false', 'False']:
+        test = False
+
+    try:
+        return _synchronize_session(device, ip, test)
     except PMException as e:
         return False, e.data, e.message
