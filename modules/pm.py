@@ -536,7 +536,7 @@ def _synchronize_session(device, ip, test=True):
                     netdb_replace(_NETDB_BGP_COLUMN, data = pm_session)
                 change = {
                         '_comment': f'update {adjective}',
-                        **pm_session
+                        **pm_session[device]['neighbors']
                         }
 
         else:
@@ -545,7 +545,7 @@ def _synchronize_session(device, ip, test=True):
                 netdb_add(_NETDB_BGP_COLUMN, data = pm_session)
             change = {
                     '_comment': f'addition {adjective}',
-                    **pm_session
+                    **pm_session[device]['neighbors']
                     }
 
     elif data:
