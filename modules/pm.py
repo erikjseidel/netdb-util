@@ -674,7 +674,7 @@ def synchronize_session(method, data, params):
         return False, e.data, e.message
 
 
-@restful_method
+@restful_method(methods=['PUT'])
 def set_status(method, data, params):
     device = params.get('device')
     ip = params.get('ip')
