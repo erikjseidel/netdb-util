@@ -14,6 +14,7 @@ __all__ = [
         'generate_session',
         'synchronize_sessions',
         'synchronize_session',
+        'set_status',
         ]
 
 _NETDB_BGP_COLUMN   = 'bgp'
@@ -569,6 +570,34 @@ def _synchronize_session(device, ip, test=True):
     return True if change else False, change, message
 
 
+def _set_status(device, ip, status):
+    if status not in ['enabled', 'disabled', 'maintenance']:
+        return False, None, 'invalid session status'
+
+    data = { 'status': status }
+
+    # Try direct sessions first
+    if session_id := _search_direct_sessions(device, ip):
+        endpoint = f'peering/direct-peering-sessions/{session_id}/'
+
+    # No direct sessions found; try IXP session
+    elif session_id := _search_ixp_sessions(device, ip):
+        endpoint = f'peering/internet-exchange-peering-sessions/{session_id}/'
+
+    # No sessions found.
+    else:
+        return False, None, 'PM eBGP session not found.'
+
+    session = PeeringManager(endpoint).get()
+    if session['status'].get('value') == status:
+        return False, None, 'Status not changed'
+
+    PeeringManager(endpoint).patch(data)
+
+    # Synchronize netdb and return
+    return _synchronize_session(device, ip, test=False)
+
+
 @restful_method
 def generate_direct_sessions(method, data, params):
     try:
@@ -642,4 +671,21 @@ def synchronize_session(method, data, params):
     try:
         return _synchronize_session(device, ip, test)
     except PMException as e:
+        return False, e.data, e.message
+
+
+@restful_method
+def set_status(method, data, params):
+    device = params.get('device')
+    ip = params.get('ip')
+    status = params.get('status')
+
+    if not (device or ip):
+        return False, None, 'device and ip parameters required'
+
+    try:
+        return _set_status(device, ip, status)
+
+    except PMException as e:
+        logger.error(f'exception at pm.set_maintenance: {e.message}', exc_info=e)
         return False, e.data, e.message
