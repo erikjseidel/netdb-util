@@ -10,9 +10,8 @@ from util.netdb import (
 # Public symbols
 __all__ = [
         'generate_direct_sessions',
-        'generate_direct_session',
         'generate_ixp_sessions',
-        'generate_ixp_session',
+        'generate_session',
         'synchronize_sessions',
         ]
 
@@ -118,6 +117,40 @@ class PMException(Exception):
         self.code    = code
         self.message = message
         super().__init__(self.message)
+
+
+def _search_direct_sessions(device, ip):
+    try:
+        ipaddress.ip_address(ip)
+    except:
+        return None
+
+    sessions = PeeringManager('peering/direct-peering-sessions').get(q=ip)
+
+    for session in sessions:
+        if ( session['router'].get('name') == device 
+                and session.get('ip_address').split('/')[0] == ip ):
+            return session.get('id')
+
+    return None
+
+
+def _search_ixp_sessions(device, ip):
+    try:
+        ipaddress.ip_address(ip)
+    except:
+        return None
+
+    sessions = PeeringManager('peering/internet-exchange-peering-sessions').get(q=ip)
+    connections = { i.pop('id') : i for i in PeeringManager('net/connections').get() }
+
+    for session in sessions:
+        connection_id = session['ixp_connection'].get('id')
+        if ( connections[connection_id]['router'].get('name') == device
+                and session.get('ip_address') == ip ):
+            return session.get('id')
+
+    return None
 
 
 def _generate_direct_session_base(session, groups):
@@ -382,6 +415,21 @@ def _generate_ixp_session(id):
     return out
 
 
+def _generate_session(device, ip):
+    out = None
+
+    # Try direct sessions first
+    if session_id := _search_direct_sessions(device, ip):
+        out = _generate_direct_session(session_id)
+
+    # No direct sessions found; try IXP session
+    elif session_id := _search_ixp_sessions(device, ip):
+        out = _generate_ixp_session(session_id)
+
+    # No sessions found
+    return out
+
+
 def _synchronize_sessions(test=True):
     # Load and validation
     pm_sessions = _generate_ixp_sessions()
@@ -474,25 +522,6 @@ def generate_direct_sessions(method, data, params):
 
 
 @restful_method
-def generate_direct_session(method, data, params):
-    if not ( id := params.get('id') ):
-        return False, None, 'id parameter required'
-
-    try:
-        data = _generate_direct_session(id)
-
-    except PMException as e:
-        logger.error(f'exception at pm.generate_direct_session: {e.message}', exc_info=e)
-        return False, e.data, e.message
-
-    msg = f'eBGP direct session {id} not found'
-    if data:
-        msg = 'eBGP direct session generated from Peering Manager datasource'
-
-    return bool(data), data, msg
-
-
-@restful_method
 def generate_ixp_sessions(method, data, params):
     try:
         data = _generate_ixp_sessions()
@@ -505,20 +534,23 @@ def generate_ixp_sessions(method, data, params):
 
 
 @restful_method
-def generate_ixp_session(method, data, params):
-    if not ( id := params.get('id') ):
-        return False, None, 'id parameter required'
+def generate_session(method, data, params):
+    device = params.get('device')
+    ip = params.get('ip')
+
+    if not (device or ip):
+        return False, None, 'device and ip parameters required'
 
     try:
-        data = _generate_ixp_session(id)
+        data = _generate_session(device, ip)
 
     except PMException as e:
-        logger.error(f'exception at pm.generate_ixp_session: {e.message}', exc_info=e)
+        logger.error(f'exception at pm.generate_session: {e.message}', exc_info=e)
         return False, e.data, e.message
 
-    msg = f'eBGP IXP session {id} not found'
+    msg = f'eBGP session not found'
     if data:
-        msg = 'eBGP IXP session generated from Peering Manager datasource'
+        msg = 'eBGP session generated from Peering Manager datasource'
 
     return bool(data), data, msg
 
