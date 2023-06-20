@@ -222,6 +222,17 @@ def _generate_direct_session_base(session, groups):
 
     addr_fam['route_map'] = route_map
 
+    relationship = session['relationship'].get('slug')
+
+    if relationship != 'transit-session':
+        if family == 6:
+            max_prefixes = session['autonomous_system'].get('ipv6_max_prefixes')
+        else:
+            max_prefixes = session['autonomous_system'].get('ipv4_max_prefixes')
+
+        if max_prefixes:
+            addr_fam['max_prefixes'] = max_prefixes
+
     meta = {
             'session_id'   : session_id,
             'url'          : url,
@@ -230,7 +241,7 @@ def _generate_direct_session_base(session, groups):
             'group'        : group.get('slug'),
             'group_id'     : group_id,
             'comments'     : session.get('comments'),
-            'type'         : session['relationship'].get('slug'),
+            'type'         : relationship,
             }
     meta = { k : v for k, v in meta.items() if v }
 
@@ -315,6 +326,15 @@ def _generate_ixp_session_base(session, connections, ixps, policies):
             route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
 
     addr_fam['route_map'] = route_map
+
+    if 'ix_transit' not in tags:
+        if family == 6:
+            max_prefixes = session['autonomous_system'].get('ipv6_max_prefixes')
+        else:
+            max_prefixes = session['autonomous_system'].get('ipv4_max_prefixes')
+
+        if max_prefixes:
+            addr_fam['max_prefixes'] = max_prefixes
 
     meta = {
             'session_id'    : session_id,
