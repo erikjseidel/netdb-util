@@ -155,7 +155,28 @@ def _search_ixp_sessions(device, ip):
     return None
 
 
-def _generate_direct_session_base(session, groups):
+def _generate_policies(pm_object, policies, family):
+    # ASN / IXP etc.  policies for v4 and v6 groups together. We need to tease out the policies
+    # for our family.
+    policy_ids = {
+            'import' : [ i['id'] for i in pm_object['import_routing_policies'] ],
+            'export' : [ i['id'] for i in pm_object['export_routing_policies'] ],
+            }
+
+    out_policies = {}
+    for i in ['import_routing_policies', 'export_routing_policies']:
+        generated = []
+        for j in policy_ids[ i.split('_')[0] ]:
+            if policies[j]['address_family'] in [0, family]:
+                generated.append(policies[j]['name'])
+
+        if generated:
+            out_policies[i] = generated
+
+    return out_policies
+
+
+def _generate_direct_session_base(session, groups, asns, policies):
     if ( status := session['status'].get('value') ) == 'disabled':
         return None
 
@@ -210,6 +231,13 @@ def _generate_direct_session_base(session, groups):
 
     addr_fam  = { 'nhs' : 'y'}
     route_map = {}
+
+    # Used for loading ASN level policies
+    asn_id = session['autonomous_system']['id']
+    asn = asns.get(asn_id)
+
+    asn_policies = _generate_policies(asn, policies, family)
+
     for i in ['import_routing_policies', 'export_routing_policies']:
         if 'reject' in tags or status == 'maintenance':
             route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
@@ -217,6 +245,9 @@ def _generate_direct_session_base(session, groups):
             route_map[ i.split('_')[0] ] = session[i][0]['name']
         elif group and len(group[i]) > 0:
             route_map[ i.split('_')[0] ] = group[i][0]['name']
+        elif asn_policies and len(asn_policies[i]) > 0:
+            # If no session or group policies, we can try ASN
+            route_map[ i.split('_')[0] ] = asn_policies[i][0]
         else:
             route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
 
@@ -257,7 +288,7 @@ def _generate_direct_session_base(session, groups):
             }
 
 
-def _generate_ixp_session_base(session, connections, ixps, policies):
+def _generate_ixp_session_base(session, connections, ixps, asns, policies):
     if ( status := session['status'].get('value') ) == 'disabled':
         return None
 
@@ -285,19 +316,6 @@ def _generate_ixp_session_base(session, connections, ixps, policies):
     else:
         family = 4
 
-    # IXP policies for v4 and v6 groups together. We need to tease out the policies
-    # for our family.
-    ixp_policy_ids = {
-            'import' : [ i['id'] for i in ixp['import_routing_policies'] ],
-            'export' : [ i['id'] for i in ixp['export_routing_policies'] ],
-            }
-    ixp_policies = {}
-    for i in ['import_routing_policies', 'export_routing_policies']:
-        ixp_policies[i] = []
-        for j in ixp_policy_ids[ i.split('_')[0] ]:
-            if policies[j]['address_family'] in [0, family]:
-                ixp_policies[i].append(policies[j]['name'])
-
     url = f"{pm.PM_URL_BASE}/internet-exchange-peering-sessions/{session_id}/"
 
     entry = {
@@ -315,13 +333,27 @@ def _generate_ixp_session_base(session, connections, ixps, policies):
 
     addr_fam  = { 'nhs' : 'y'}
     route_map = {}
+
+    # Used for loading ASN level policies
+    asn_id = session['autonomous_system']['id']
+    asn = asns.get(asn_id)
+
+    # Try to load policies for ASN
+    ixp_asn_policies = _generate_policies(asn, policies, family)
+    if not ixp_asn_policies:
+        # No ASN policies found. Next try IXP.
+        ixp_asn_policies = _generate_policies(ixp, policies, family)
+
+    # Add policies to BGP entry
     for i in ['import_routing_policies', 'export_routing_policies']:
         if 'reject' in tags or status == 'maintenance':
             route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
         elif len(session[i]) > 0:
+            # Session policies have highest priority
             route_map[ i.split('_')[0] ] = session[i][0]['name']
-        elif len(ixp_policies[i]) > 0:
-            route_map[ i.split('_')[0] ] = ixp_policies[i][0]
+        elif ixp_asn_policies and len(ixp_asn_policies[i]) > 0:
+            # If no session policies, we can try ASN or IXP
+            route_map[ i.split('_')[0] ] = ixp_asn_policies[i][0]
         else:
             route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
 
@@ -364,11 +396,13 @@ def _generate_ixp_session_base(session, connections, ixps, policies):
 def _generate_direct_sessions():
     sessions = PeeringManager('peering/direct-peering-sessions').get()
     groups   = { i.pop('id') : i for i in PeeringManager('peering/bgp-groups').get() }
+    asns     = { i.pop('id') : i for i in PeeringManager('peering/autonomous-systems').get() }
+    policies = { i.pop('id') : i for i in PeeringManager('peering/routing-policies').get() }
 
     out = {}
     if sessions:
         for session in sessions:
-            result = _generate_direct_session_base(session, groups)
+            result = _generate_direct_session_base(session, groups, asns, policies)
             if not result:
                 continue
 
@@ -402,12 +436,13 @@ def _generate_ixp_sessions():
     # Turn these into `id' keyed dicts for quick lookups. 
     connections = { i.pop('id') : i for i in PeeringManager('net/connections').get() }
     ixps        = { i.pop('id') : i for i in PeeringManager('peering/internet-exchanges').get() }
+    asns        = { i.pop('id') : i for i in PeeringManager('peering/autonomous-systems').get() }
     policies    = { i.pop('id') : i for i in PeeringManager('peering/routing-policies').get() }
 
     out = {}
     if sessions:
         for session in sessions:
-            result = _generate_ixp_session_base(session, connections, ixps, policies)
+            result = _generate_ixp_session_base(session, connections, ixps, asns, policies)
             if not result:
                 continue
 
