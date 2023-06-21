@@ -9,6 +9,8 @@ from util.netdb import (
         netdb_add, netdb_replace, netdb_delete
         )
 
+from pprint import pprint
+
 # Public symbols
 __all__ = [
         'generate_direct_sessions',
@@ -163,8 +165,11 @@ def _search_ixp_sessions(device, ip):
 
 
 def _create_policy(data):
+
+    data_in = { k: v for k, v in data.items() if v }
+
     try:
-        policy = pm_schema.pmPolicySchema().load(data)
+        policy = pm_schema.pmPolicySchema().load(data_in)
     except ValidationError as error:
         return False, error.messages, 'invalid policy data'
 
