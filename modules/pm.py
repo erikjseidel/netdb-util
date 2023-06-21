@@ -443,10 +443,12 @@ def _generate_direct_sessions():
 def _generate_direct_session(id):
     session = PeeringManager(f'peering/direct-peering-sessions/{id}/').get()
     groups   = { i.pop('id') : i for i in PeeringManager('peering/bgp-groups').get() }
+    asns     = { i.pop('id') : i for i in PeeringManager('peering/autonomous-systems').get() }
+    policies = { i.pop('id') : i for i in PeeringManager('peering/routing-policies').get() }
 
     out = {}
     if session.get('id'):
-        result = _generate_direct_session_base(session, groups)
+        result = _generate_direct_session_base(session, groups, asns, policies)
         if not result:
             return None
 
@@ -485,11 +487,12 @@ def _generate_ixp_session(id):
 
     connections = { i.pop('id') : i for i in PeeringManager('net/connections').get() }
     ixps        = { i.pop('id') : i for i in PeeringManager('peering/internet-exchanges').get() }
+    asns        = { i.pop('id') : i for i in PeeringManager('peering/autonomous-systems').get() }
     policies    = { i.pop('id') : i for i in PeeringManager('peering/routing-policies').get() }
 
     out = {}
     if session.get('id'):
-        result = _generate_ixp_session_base(session, connections, ixps, policies)
+        result = _generate_ixp_session_base(session, connections, ixps, asns, policies)
         if not result:
             return None
 
