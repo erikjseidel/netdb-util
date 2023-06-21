@@ -1,7 +1,9 @@
 import requests, json, logging, time, yaml, ipaddress
+from marshmallow import ValidationError
 from copy import deepcopy
 from util.decorators import restful_method
 from config import pm
+from schema import pm as pm_schema
 from util.netdb import (
         NetdbException, netdb_get, netdb_validate, 
         netdb_add, netdb_replace, netdb_delete
@@ -15,6 +17,7 @@ __all__ = [
         'synchronize_sessions',
         'synchronize_session',
         'set_status',
+        'create_policy',
         ]
 
 _NETDB_BGP_COLUMN   = 'bgp'
@@ -88,22 +91,26 @@ class PeeringManager:
         url = self.url
         logger.debug(f'PM.get: {url}')
         resp = requests.post(url, headers = self._HEADERS, json = data )
+        code = resp.status_code
 
-        if 'results' in ( js := resp.json() ):
-            return js['results']
+        result = False
+        if code in range(200, 300):
+            result = True
 
-        return js['result'] if 'result' in js else js
+        return result, resp.json()
 
 
     def patch(self, data):
         url = self.url
         logger.debug(f'PM.patch: {url}')
         resp = requests.patch(url, headers = self._HEADERS, json = data )
+        code = resp.status_code
 
-        if 'results' in ( js := resp.json() ):
-            return js['results']
+        result = False
+        if code in range(200, 300):
+            result = True
 
-        return js['result'] if 'result' in js else js
+        return result, resp.json()
 
 
 class PMException(Exception):
@@ -153,6 +160,21 @@ def _search_ixp_sessions(device, ip):
             return session.get('id')
 
     return None
+
+
+def _create_policy(data):
+    try:
+        policy = pm_schema.pmPolicySchema().load(data)
+    except ValidationError as error:
+        return False, error.messages, 'invalid policy data'
+
+    result, ret = PeeringManager('peering/routing-policies').post(policy)
+
+    msg = 'PM API returned an error'
+    if result:
+        msg = 'Policy created'
+
+    return result, ret, msg
 
 
 def _generate_policies(pm_object, policies, family):
@@ -740,6 +762,17 @@ def set_status(method, data, params):
 
     try:
         return _set_status(device, ip, status)
+
+    except PMException as e:
+        logger.error(f'exception at pm.set_maintenance: {e.message}', exc_info=e)
+        return False, e.data, e.message
+
+
+@restful_method(methods=['POST'])
+def create_policy(method, data, params):
+
+    try:
+        return _create_policy(data)
 
     except PMException as e:
         logger.error(f'exception at pm.set_maintenance: {e.message}', exc_info=e)
