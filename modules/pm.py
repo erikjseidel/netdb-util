@@ -4,10 +4,7 @@ from copy import deepcopy
 from util.decorators import restful_method
 from config import pm
 from schema import pm as pm_schema
-from util.netdb import (
-        NetdbException, netdb_get, netdb_validate, 
-        netdb_add, netdb_replace, netdb_delete
-        )
+from util import netdb
 
 from pprint import pprint
 
@@ -34,28 +31,58 @@ class PeeringManager:
     """
     Simple class for interacting with Peering Manager API.
     """
-    _BASE = pm.PM_BASE
+    _API_BASE = pm.PM_URL + '/api'
+
+    _PUBLIC_API_BASE = pm.PM_PUBLIC_URL + '/api'
+
     _HEADERS = pm.PM_HEADERS
-    
+
+    ENDPOINTS = {
+        'direct-sessions' : 'peering/direct-peering-sessions',
+        'ixp-sessions'    : 'peering/internet-exchange-peering-sessions',
+        'policies'        : 'peering/routing-policies',
+        'groups'          : 'peering/bgp-groups',
+        'asns'            : 'peering/autonomous-systems',
+        'ixps'            : 'peering/internet-exchanges',
+        'policies'        : 'peering/routing-policies',
+        'connections'     : 'net/connections',
+        }
+
     def __init__(self, endpoint=None):
         self.set(endpoint)
 
 
     def set(self, endpoint):
-        self.url = self._BASE + '/api'
+        self.url = self._API_BASE
+        self.public_url = self._PUBLIC_API_BASE
+
+        if endpoint in self.ENDPOINTS.keys():
+            endpoint = self.ENDPOINTS[endpoint]
 
         if endpoint:
             if not endpoint.startswith('/'):
                 self.url += '/'
+                self.public_url += '/'
             if not endpoint.endswith('/'):
                 endpoint += '/'
             self.url += endpoint
+            self.public_url += endpoint
         return self
 
 
     def set_url(self, url):
         self.url = url
         return self
+
+
+    def set_id(self, id):
+        self.url += str(id) + '/'
+        self.public_url += str(id) + '/'
+        return self
+
+
+    def get_public_url(self):
+        return self.public_url
 
 
     def get(self, **kwargs):
@@ -136,7 +163,7 @@ def _search_direct_sessions(device, ip):
     except:
         return None
 
-    sessions = PeeringManager('peering/direct-peering-sessions').get(q=ip)
+    sessions = PeeringManager('direct-sessions').get(q=ip)
 
     for session in sessions:
         if ( session['router'].get('name') == device 
@@ -152,8 +179,8 @@ def _search_ixp_sessions(device, ip):
     except:
         return None
 
-    sessions = PeeringManager('peering/internet-exchange-peering-sessions').get(q=ip)
-    connections = { i.pop('id') : i for i in PeeringManager('net/connections').get() }
+    sessions = PeeringManager('ixp-sessions').get(q=ip)
+    connections = { i.pop('id') : i for i in PeeringManager('connections').get() }
 
     for session in sessions:
         connection_id = session['ixp_connection'].get('id')
@@ -165,15 +192,14 @@ def _search_ixp_sessions(device, ip):
 
 
 def _create_policy(data):
-
     data_in = { k: v for k, v in data.items() if v }
 
     try:
-        policy = pm_schema.pmPolicySchema().load(data_in)
+        policy = pm_schema.PolicySchema().load(data_in)
     except ValidationError as error:
         return False, error.messages, 'invalid policy data'
 
-    result, ret = PeeringManager('peering/routing-policies').post(policy)
+    result, ret = PeeringManager('policies').post(policy)
 
     msg = 'PM API returned an error'
     if result:
@@ -234,7 +260,7 @@ def _generate_direct_session_base(session, groups, asns, policies):
     else:
         family = 4
 
-    url = f"{pm.PM_URL_BASE}/direct-peering-sessions/{session_id}/"
+    url = f"{PeeringManager('direct-sessions').get_public_url()}{session_id}/"
 
     source_ip = session.get('local_ip_address')
 
@@ -343,7 +369,7 @@ def _generate_ixp_session_base(session, connections, ixps, asns, policies):
     else:
         family = 4
 
-    url = f"{pm.PM_URL_BASE}/internet-exchange-peering-sessions/{session_id}/"
+    url = f"{PeeringManager('ixp-sessions').get_public_url()}{session_id}/"
 
     entry = {
             'remote_asn' : session['autonomous_system'].get('asn'),
@@ -421,10 +447,10 @@ def _generate_ixp_session_base(session, connections, ixps, asns, policies):
 
 
 def _generate_direct_sessions():
-    sessions = PeeringManager('peering/direct-peering-sessions').get()
-    groups   = { i.pop('id') : i for i in PeeringManager('peering/bgp-groups').get() }
-    asns     = { i.pop('id') : i for i in PeeringManager('peering/autonomous-systems').get() }
-    policies = { i.pop('id') : i for i in PeeringManager('peering/routing-policies').get() }
+    sessions = PeeringManager('direct-sessions').get()
+    groups   = { i.pop('id') : i for i in PeeringManager('groups').get() }
+    asns     = { i.pop('id') : i for i in PeeringManager('asns').get() }
+    policies = { i.pop('id') : i for i in PeeringManager('policies').get() }
 
     out = {}
     if sessions:
@@ -441,10 +467,17 @@ def _generate_direct_sessions():
 
 
 def _generate_direct_session(id):
-    session = PeeringManager(f'peering/direct-peering-sessions/{id}/').get()
-    groups   = { i.pop('id') : i for i in PeeringManager('peering/bgp-groups').get() }
-    asns     = { i.pop('id') : i for i in PeeringManager('peering/autonomous-systems').get() }
-    policies = { i.pop('id') : i for i in PeeringManager('peering/routing-policies').get() }
+    session = PeeringManager('direct-sessions').set_id(id).get()
+
+    groups = {}
+    if session['bgp_group'] and ( group_id := session['bgp_group'].get('id') ):
+        g = PeeringManager('groups').set_id(group_id).get()
+        groups = { g.pop('id') : g }
+
+    a = PeeringManager('asns').set_id(session['autonomous_system']['id']).get()
+    asns = { a.pop('id') : a }
+
+    policies = { i.pop('id') : i for i in PeeringManager('policies').get() }
 
     out = {}
     if session.get('id'):
@@ -460,13 +493,13 @@ def _generate_direct_session(id):
 
 def _generate_ixp_sessions():
     # No fancy scripts or graphql in PM so just need to load a lot of stuff.
-    sessions    = PeeringManager('peering/internet-exchange-peering-sessions').get()
+    sessions    = PeeringManager('ixp-sessions').get()
 
     # Turn these into `id' keyed dicts for quick lookups. 
-    connections = { i.pop('id') : i for i in PeeringManager('net/connections').get() }
-    ixps        = { i.pop('id') : i for i in PeeringManager('peering/internet-exchanges').get() }
-    asns        = { i.pop('id') : i for i in PeeringManager('peering/autonomous-systems').get() }
-    policies    = { i.pop('id') : i for i in PeeringManager('peering/routing-policies').get() }
+    connections = { i.pop('id') : i for i in PeeringManager('connections').get() }
+    ixps        = { i.pop('id') : i for i in PeeringManager('ixps').get() }
+    asns        = { i.pop('id') : i for i in PeeringManager('asns').get() }
+    policies    = { i.pop('id') : i for i in PeeringManager('policies').get() }
 
     out = {}
     if sessions:
@@ -483,11 +516,17 @@ def _generate_ixp_sessions():
 
 
 def _generate_ixp_session(id):
-    session = PeeringManager(f'peering/internet-exchange-peering-sessions/{id}/').get()
+    session = PeeringManager(f'ixp-sessions').set_id(id).get()
 
-    connections = { i.pop('id') : i for i in PeeringManager('net/connections').get() }
-    ixps        = { i.pop('id') : i for i in PeeringManager('peering/internet-exchanges').get() }
-    asns        = { i.pop('id') : i for i in PeeringManager('peering/autonomous-systems').get() }
+    c = PeeringManager('connections').set_id(session['ixp_connection']['id']).get()
+    connections = { c.pop('id') : c}
+
+    i = PeeringManager('ixps').set_id(c['internet_exchange_point']['id']).get()
+    ixps = { i.pop('id') : i}
+
+    a = PeeringManager('asns').set_id(session['autonomous_system']['id']).get()
+    asns = { a.pop('id') : a }
+
     policies    = { i.pop('id') : i for i in PeeringManager('peering/routing-policies').get() }
 
     out = {}
@@ -528,11 +567,11 @@ def _synchronize_sessions(test=True):
         for neighbor, bgp_data in neighbors.get('neighbors').items():
             pm_sessions[session]['neighbors'][neighbor] = bgp_data
 
-    result, out, message = netdb_validate(_NETDB_BGP_COLUMN, data = pm_sessions)
+    result, out, message = netdb.validate(_NETDB_BGP_COLUMN, data = pm_sessions)
     if not result:
         return result, out, message
 
-    result, netdb_ebgp, _ = netdb_get(_NETDB_BGP_COLUMN, data = _FILTER)
+    result, netdb_ebgp, _ = netdb.get(_NETDB_BGP_COLUMN, data = _FILTER)
     if not result:
         netdb_ebgp = {}
 
@@ -553,7 +592,7 @@ def _synchronize_sessions(test=True):
                 if data != netdb_ebgp[device]['neighbors'][neighbor]:
                     # Update required.
                     if not test:
-                        netdb_replace(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
+                        netdb.replace(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
                     changes[neighbor] = {
                             '_comment': f'update {adjective}',
                             **data
@@ -562,7 +601,7 @@ def _synchronize_sessions(test=True):
             else:
                 # Addition required
                 if not test:
-                    netdb_add(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
+                    netdb.add(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
                 changes[neighbor] = {
                         '_comment': f'addition {adjective}',
                         **data
@@ -574,7 +613,7 @@ def _synchronize_sessions(test=True):
                 # Deletion required
                 if not test:
                     filt = { "set_id": [device, 'neighbors', neighbor], **_FILTER }
-                    netdb_delete(_NETDB_BGP_COLUMN, data = filt)
+                    netdb.delete(_NETDB_BGP_COLUMN, data = filt)
                 changes[neighbor] = {
                        '_comment': f'removal from netdb {adjective}',
                        }
@@ -600,7 +639,7 @@ def _synchronize_session(device, ip, test=True):
     # Load and validation
     pm_session = _generate_session(device, ip)
 
-    result, netdb_ebgp, _ = netdb_get(_NETDB_BGP_COLUMN, data = _FILTER)
+    result, netdb_ebgp, _ = netdb.get(_NETDB_BGP_COLUMN, data = _FILTER)
     if not netdb_ebgp.get(device):
         data = None
     else:
@@ -610,7 +649,7 @@ def _synchronize_session(device, ip, test=True):
 
     change = None
     if pm_session:
-        result, out, message = netdb_validate(_NETDB_BGP_COLUMN, data = pm_session)
+        result, out, message = netdb.validate(_NETDB_BGP_COLUMN, data = pm_session)
         if not result:
             return result, out, message
 
@@ -618,7 +657,7 @@ def _synchronize_session(device, ip, test=True):
             if data != pm_session[device]['neighbors'][ip]:
                 # Update required.
                 if not test:
-                    netdb_replace(_NETDB_BGP_COLUMN, data = pm_session)
+                    netdb.replace(_NETDB_BGP_COLUMN, data = pm_session)
                 change = {
                         '_comment': f'update {adjective}',
                         **pm_session[device]['neighbors']
@@ -627,7 +666,7 @@ def _synchronize_session(device, ip, test=True):
         else:
             # Addition required
             if not test:
-                netdb_add(_NETDB_BGP_COLUMN, data = pm_session)
+                netdb.add(_NETDB_BGP_COLUMN, data = pm_session)
             change = {
                     '_comment': f'addition {adjective}',
                     **pm_session[device]['neighbors']
@@ -637,7 +676,7 @@ def _synchronize_session(device, ip, test=True):
         # Deletion required
         if not test:
             filt = { "set_id": [device, 'neighbors', ip], **_FILTER }
-            netdb_delete(_NETDB_BGP_COLUMN, data = filt)
+            netdb.delete(_NETDB_BGP_COLUMN, data = filt)
         change = {
                '_comment': f'removal from netdb {adjective}',
                }

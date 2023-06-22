@@ -12,7 +12,7 @@ POLICY_FAMILIES = {
         'both' : 0,
         }
 
-class pmPolicySchema(Schema):
+class PolicySchema(Schema):
     name    = fields.String(required=True, validate=validate.Regexp("^[A-Za-z0-9-]+$"))
     type    = fields.String(required=True, validate=validate.OneOf( list(POLICY_TYPES.keys()) ))
     weight  = fields.Integer(validate = validate.Range(min=1, max=10001))

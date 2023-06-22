@@ -2,10 +2,7 @@ import requests, json, logging, time, yaml, ipaddress, re
 from copy import deepcopy
 from util.decorators import restful_method
 from config import netbox
-from util.netdb import (
-        NetdbException, netdb_get, netdb_validate, 
-        netdb_add, netdb_replace, netdb_delete
-        )
+from util import netdb
 
 # Public symbols
 __all__ = [
@@ -616,11 +613,11 @@ def _generate_ebgp():
 def _synchronize_devices(test = True):
     netbox_dev = _generate_devices()
 
-    result, out, message = netdb_validate(_NETDB_DEV_COLUMN, data = netbox_dev)
+    result, out, message = netdb.validate(_NETDB_DEV_COLUMN, data = netbox_dev)
     if not result:
         return result, out, message
 
-    result, netdb_dev, message = netdb_get(_NETDB_DEV_COLUMN, data = _FILTER)
+    result, netdb_dev, message = netdb.get(_NETDB_DEV_COLUMN, data = _FILTER)
     if not result:
         netdb_dev = {}
 
@@ -634,12 +631,12 @@ def _synchronize_devices(test = True):
                 # Update required.
                 changes[device] = f'update {adjective}'
                 if not test:
-                    netdb_replace(_NETDB_DEV_COLUMN, data = { device : data })
+                    netdb.replace(_NETDB_DEV_COLUMN, data = { device : data })
             netdb_dev.pop(device)
         else:
             # Addition required
             if not test:
-                netdb_add(_NETDB_DEV_COLUMN, data = { device : data })
+                netdb.add(_NETDB_DEV_COLUMN, data = { device : data })
             changes[device] = f'addition {adjective}'
 
     # Any remaining (unpopped) devices in netdb need to be deleted
@@ -647,7 +644,7 @@ def _synchronize_devices(test = True):
         # Deletion required
         if not test:
             filt = { "id": device, **_FILTER }
-            netdb_delete(_NETDB_IFACE_COLUMN, data = filt)
+            netdb.delete(_NETDB_IFACE_COLUMN, data = filt)
         changes[device] = f'removal from netdb {adjective}'
 
     if not changes:
@@ -671,11 +668,11 @@ def _synchronize_interfaces(devices, test=True):
     for device in devices:
         netbox_ifaces[device] = _generate_interfaces(device)
 
-        result, out, message = netdb_validate(_NETDB_IFACE_COLUMN, data = netbox_ifaces)
+        result, out, message = netdb.validate(_NETDB_IFACE_COLUMN, data = netbox_ifaces)
         if not result:
             return result, out, message
 
-        result, out, message = netdb_get(_NETDB_IFACE_COLUMN, data = { 'set_id': device, **_FILTER })
+        result, out, message = netdb.get(_NETDB_IFACE_COLUMN, data = { 'set_id': device, **_FILTER })
         if not result:
             netdb_ifaces[device] = {}
         else:
@@ -693,12 +690,12 @@ def _synchronize_interfaces(devices, test=True):
                     # Update required.
                     changes[iface] = f'update {adjective}'
                     if not test:
-                        netdb_replace(_NETDB_IFACE_COLUMN, data = { device: { iface : data }})
+                        netdb.replace(_NETDB_IFACE_COLUMN, data = { device: { iface : data }})
                 netdb_ifaces[device].pop(iface)
             else:
                 # Addition required
                 if not test:
-                    netdb_add(_NETDB_IFACE_COLUMN, data = { device: { iface : data }})
+                    netdb.add(_NETDB_IFACE_COLUMN, data = { device: { iface : data }})
                 changes[iface] = f'addition {adjective}'
 
         # Any remaining (unpopped) interfaces in netdb need to be deleted
@@ -706,7 +703,7 @@ def _synchronize_interfaces(devices, test=True):
             # Deletion required
             if not test:
                 filt = { "set_id": [device, iface], **_FILTER }
-                netdb_delete(_NETDB_IFACE_COLUMN, data = filt)
+                netdb.delete(_NETDB_IFACE_COLUMN, data = filt)
             changes[iface] = f'removal from netdb {adjective}'
 
         if changes:
@@ -728,11 +725,11 @@ def _synchronize_interfaces(devices, test=True):
 def _synchronize_igp(test = True):
     netbox_igp = _generate_igp()
 
-    result, out, message = netdb_validate(_NETDB_IGP_COLUMN, data = netbox_igp)
+    result, out, message = netdb.validate(_NETDB_IGP_COLUMN, data = netbox_igp)
     if not result:
         return result, out, message
 
-    result, netdb_igp, _ = netdb_get(_NETDB_IGP_COLUMN, data = _FILTER)
+    result, netdb_igp, _ = netdb.get(_NETDB_IGP_COLUMN, data = _FILTER)
     if not result:
         netdb_igp = {}
 
@@ -746,12 +743,12 @@ def _synchronize_igp(test = True):
                 # Update required.
                 changes[device] = f'update {adjective}'
                 if not test:
-                    netdb_replace(_NETDB_IGP_COLUMN, data = { device : data })
+                    netdb.replace(_NETDB_IGP_COLUMN, data = { device : data })
             netdb_igp.pop(device)
         else:
             # Addition required
             if not test:
-                netdb_add(_NETDB_IGP_COLUMN, data = { device : data })
+                netdb.add(_NETDB_IGP_COLUMN, data = { device : data })
             changes[device] = f'addition {adjective}'
 
     # Any remaining (unpopped) devices in netdb need to be deleted
@@ -759,7 +756,7 @@ def _synchronize_igp(test = True):
         # Deletion required
         if not test:
             filt = { "set_id": [device, 'isis'], **_FILTER }
-            netdb_delete(_NETDB_IGP_COLUMN, data = filt)
+            netdb.delete(_NETDB_IGP_COLUMN, data = filt)
         changes[device] = f'removal from netdb {adjective}'
 
     if not changes:
@@ -779,11 +776,11 @@ def _synchronize_ebgp(test=True):
     # Load and validation
     netbox_ebgp = _generate_ebgp()
 
-    result, out, message = netdb_validate(_NETDB_BGP_COLUMN, data = netbox_ebgp)
+    result, out, message = netdb.validate(_NETDB_BGP_COLUMN, data = netbox_ebgp)
     if not result:
         return result, out, message
 
-    result, netdb_ebgp, _ = netdb_get(_NETDB_BGP_COLUMN, data = _FILTER)
+    result, netdb_ebgp, _ = netdb.get(_NETDB_BGP_COLUMN, data = _FILTER)
     if not result:
         netdb_ebgp = {}
 
@@ -798,7 +795,7 @@ def _synchronize_ebgp(test=True):
                 if data != netdb_ebgp[device]['neighbors'][neighbor]:
                     # Update required.
                     if not test:
-                        netdb_replace(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
+                        netdb.replace(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
                     changes[neighbor] = {
                             '_comment': f'update {adjective}',
                             **data
@@ -807,7 +804,7 @@ def _synchronize_ebgp(test=True):
             else:
                 # Addition required
                 if not test:
-                    netdb_add(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
+                    netdb.add(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
                 changes[neighbor] = {
                         '_comment': f'addition {adjective}',
                         **data
@@ -819,7 +816,7 @@ def _synchronize_ebgp(test=True):
                 # Deletion required
                 if not test:
                     filt = { "set_id": [device, 'neighbors', neighbor], **_FILTER }
-                    netdb_delete(_NETDB_BGP_COLUMN, data = filt)
+                    netdb.delete(_NETDB_BGP_COLUMN, data = filt)
                 changes[neighbor] = {
                        '_comment': f'removal from netdb {adjective}',
                        }

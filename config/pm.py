@@ -1,4 +1,4 @@
-from .secrets import PM_TOKEN, PM_BASE, PM_URL_BASE
+from .secrets import PM_TOKEN, PM_URL, PM_PUBLIC_URL
 
 PM_HEADERS = {
             'Content-Type'  : 'application/json',

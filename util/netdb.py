@@ -23,7 +23,7 @@ class NetdbException(Exception):
         super().__init__(self.message)
 
 
-def netdb_get(column, data=None, endpoint=None, project=False):
+def get(column, data=None, endpoint=None, project=False):
     url = NETDB_URL + column
 
     if endpoint:
@@ -47,7 +47,7 @@ def netdb_get(column, data=None, endpoint=None, project=False):
     return ret['result'], ret.get('out'), ret['comment']
 
 
-def netdb_validate(column, data):
+def validate(column, data):
     url = NETDB_URL + column + '/validate'
 
     logger.debug(f'_netdb_validate: { url }')
@@ -64,7 +64,7 @@ def netdb_validate(column, data):
     return ret['result'], ret.get('out'), ret['comment']
 
 
-def netdb_add(column, data):
+def add(column, data):
     url = NETDB_URL + column
 
     logger.debug(f'_netdb_add: { url }')
@@ -78,7 +78,7 @@ def netdb_add(column, data):
         raise NetdbException(url, ret.get('out'), ret['comment'])
 
 
-def netdb_replace(column, data):
+def replace(column, data):
     url = NETDB_URL + column
 
     logger.debug(f'_netdb_replace: { url }')
@@ -92,7 +92,7 @@ def netdb_replace(column, data):
         raise NetdbException(url, ret.get('out'), ret['comment'])
 
 
-def netdb_delete(column, data):
+def delete(column, data):
     url = NETDB_URL + column
 
     logger.debug(f'netdb_delete: { url }')
