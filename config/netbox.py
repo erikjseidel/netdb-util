@@ -80,7 +80,94 @@ DEVICE_GQL = """query {
 }"""
 
 IFACE_GQL = """query {
-  interface_list(device: "%s") {
+  interface_list {
+    device {
+      name
+    }
+    id
+    name
+    type
+    description
+    mtu
+    mac_address
+    enabled
+    custom_fields
+    untagged_vlan {
+      vid
+    }
+    lag {
+      name
+      id
+    }
+    tags {
+      name
+    }
+    last_updated
+    ip_addresses {
+      id
+      address
+      dns_name
+      last_updated
+      tags {
+        name
+      }
+    }
+    parent {
+      name
+      ip_addresses {
+        address
+        tags {
+          name
+        }
+      }
+    }
+    virtual_link {
+      custom_fields
+      status
+      interface_a {
+        id
+        type
+        parent {
+          id
+          ip_addresses {
+            address
+            tags {
+              name
+            }
+          }
+        }
+      }
+      interface_b {
+        id
+        type
+        parent {
+          id
+          ip_addresses {
+            address
+            tags {
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+  config_context_list {
+    id
+    name
+    last_updated
+    tags {
+      name
+    }
+    data
+  }
+}"""
+
+ONE_IFACE_GQL = """query {
+  interface_list(device: "%s", name: "%s") {
+    device {
+      name
+    }
     id
     name
     type

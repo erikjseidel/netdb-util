@@ -17,8 +17,6 @@ __all__ = [
         'create_policy',
         ]
 
-_NETDB_BGP_COLUMN   = 'bgp'
-
 _DATASOURCE = pm.PM_SOURCE['name']
 
 _DEFAULT_REJECT = 'REJECT-ALL'
@@ -268,7 +266,7 @@ def _generate_direct_session_base(session, groups, asns, policies):
             'password'   : session.get('password'),
             'source'     : source_ip.split('/')[0] if source_ip else None,
             'type'       : 'ebgp',
-            'datasource' : pm.PM_SOURCE['name'],
+            'datasource' : _DATASOURCE,
             'weight'     : pm.PM_SOURCE['weight'],
              }
 
@@ -373,7 +371,7 @@ def _generate_ixp_session_base(session, connections, ixps, asns, policies):
             'remote_asn' : session['autonomous_system'].get('asn'),
             'password'   : session.get('password'),
             'type'       : 'ebgp',
-            'datasource' : pm.PM_SOURCE['name'],
+            'datasource' : _DATASOURCE,
             'weight'     : pm.PM_SOURCE['weight'],
             }
 
