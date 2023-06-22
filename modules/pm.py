@@ -4,9 +4,7 @@ from copy import deepcopy
 from util.decorators import restful_method
 from config import pm
 from schema import pm as pm_schema
-from util import netdb
-
-from pprint import pprint
+from util import synchronizers
 
 # Public symbols
 __all__ = [
@@ -21,7 +19,7 @@ __all__ = [
 
 _NETDB_BGP_COLUMN   = 'bgp'
 
-_FILTER = { 'datasource': pm.PM_SOURCE['name'] }
+_DATASOURCE = pm.PM_SOURCE['name']
 
 _DEFAULT_REJECT = 'REJECT-ALL'
 
@@ -527,7 +525,7 @@ def _generate_ixp_session(id):
     a = PeeringManager('asns').set_id(session['autonomous_system']['id']).get()
     asns = { a.pop('id') : a }
 
-    policies    = { i.pop('id') : i for i in PeeringManager('peering/routing-policies').get() }
+    policies = { i.pop('id') : i for i in PeeringManager('peering/routing-policies').get() }
 
     out = {}
     if session.get('id'):
@@ -567,131 +565,15 @@ def _synchronize_sessions(test=True):
         for neighbor, bgp_data in neighbors.get('neighbors').items():
             pm_sessions[session]['neighbors'][neighbor] = bgp_data
 
-    result, out, message = netdb.validate(_NETDB_BGP_COLUMN, data = pm_sessions)
-    if not result:
-        return result, out, message
 
-    result, netdb_ebgp, _ = netdb.get(_NETDB_BGP_COLUMN, data = _FILTER)
-    if not result:
-        netdb_ebgp = {}
-
-    # A somewhat nasty workaround. If all neighbors removed from PM router make sure they
-    # are still processed by the deletion.
-    for device in netdb_ebgp.keys():
-        if not pm_sessions.get(device):
-            pm_sessions[device] = {}
-
-    all_changes = {}
-    adjective = 'required' if test else 'complete'
-
-    # Apply to netdb
-    for device, ebgp_data in pm_sessions.items():
-        changes  = {}
-        for neighbor, data in ebgp_data.get('neighbors', {}).items():
-            if netdb_ebgp.get(device) and neighbor in netdb_ebgp[device]['neighbors'].keys():
-                if data != netdb_ebgp[device]['neighbors'][neighbor]:
-                    # Update required.
-                    if not test:
-                        netdb.replace(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
-                    changes[neighbor] = {
-                            '_comment': f'update {adjective}',
-                            **data
-                            }
-                netdb_ebgp[device]['neighbors'].pop(neighbor)
-            else:
-                # Addition required
-                if not test:
-                    netdb.add(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
-                changes[neighbor] = {
-                        '_comment': f'addition {adjective}',
-                        **data
-                        }
-
-        # Any remaining (unpopped) interfaces in netdb need to be deleted
-        if device in netdb_ebgp.keys():
-            for neighbor in netdb_ebgp[device]['neighbors'].keys():
-                # Deletion required
-                if not test:
-                    filt = { "set_id": [device, 'neighbors', neighbor], **_FILTER }
-                    netdb.delete(_NETDB_BGP_COLUMN, data = filt)
-                changes[neighbor] = {
-                       '_comment': f'removal from netdb {adjective}',
-                       }
-
-        if changes:
-            all_changes[device] = {}
-            all_changes[device]['neighbors'] = changes
-
-    if not all_changes:
-        message = 'Netdb eBGP sessions already synchronized. No changes made.'
-    elif test:
-        message = 'Dry run. No changes made.'
-    else:
-        message = 'Synchronization complete.'
-
-    if not test:
-        logger.info(f'_synchronize_ebgp: {message}')
-
-    return True if all_changes else False, all_changes, message
+    return synchronizers.bgp_sessions(_DATASOURCE, pm_sessions, test)
 
 
 def _synchronize_session(device, ip, test=True):
     # Load and validation
     pm_session = _generate_session(device, ip)
 
-    result, netdb_ebgp, _ = netdb.get(_NETDB_BGP_COLUMN, data = _FILTER)
-    if not netdb_ebgp.get(device):
-        data = None
-    else:
-        data = netdb_ebgp[device]['neighbors'].get(ip)
-
-    adjective = 'required' if test else 'complete'
-
-    change = None
-    if pm_session:
-        result, out, message = netdb.validate(_NETDB_BGP_COLUMN, data = pm_session)
-        if not result:
-            return result, out, message
-
-        if data:
-            if data != pm_session[device]['neighbors'][ip]:
-                # Update required.
-                if not test:
-                    netdb.replace(_NETDB_BGP_COLUMN, data = pm_session)
-                change = {
-                        '_comment': f'update {adjective}',
-                        **pm_session[device]['neighbors']
-                        }
-
-        else:
-            # Addition required
-            if not test:
-                netdb.add(_NETDB_BGP_COLUMN, data = pm_session)
-            change = {
-                    '_comment': f'addition {adjective}',
-                    **pm_session[device]['neighbors']
-                    }
-
-    elif data:
-        # Deletion required
-        if not test:
-            filt = { "set_id": [device, 'neighbors', ip], **_FILTER }
-            netdb.delete(_NETDB_BGP_COLUMN, data = filt)
-        change = {
-               '_comment': f'removal from netdb {adjective}',
-               }
-
-    if not change:
-        message = 'Netdb eBGP session already synchronized. No changes made.'
-    elif test:
-        message = 'Dry run. No changes made.'
-    else:
-        message = 'Synchronization complete.'
-
-    if not test:
-        logger.info(f'_synchronize_ebgp: {message}')
-
-    return True if change else False, change, message
+    return synchronizers.bgp_session(_DATASOURCE, pm_session, device, ip, test)
 
 
 def _set_status(device, ip, status):
