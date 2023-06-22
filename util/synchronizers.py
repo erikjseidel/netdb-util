@@ -1,4 +1,3 @@
-#import requests, json, logging, time, yaml, ipaddress
 import logging
 from util import netdb
 
