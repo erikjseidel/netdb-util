@@ -619,7 +619,7 @@ def generate_ixp_session(id):
     a = PeeringManager('asns').set_id(session['autonomous_system']['id']).get()
     asns = { a.pop('id') : a }
 
-    policies = { i.pop('id') : i for i in PeeringManager('peering/routing-policies').get() }
+    policies = { i.pop('id') : i for i in PeeringManager('policies').get() }
 
     out = {}
     if session.get('id'):
