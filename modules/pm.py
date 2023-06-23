@@ -28,7 +28,6 @@ class PeeringManager:
         'groups'          : 'peering/bgp-groups',
         'asns'            : 'peering/autonomous-systems',
         'ixps'            : 'peering/internet-exchanges',
-        'policies'        : 'peering/routing-policies',
         'connections'     : 'net/connections',
         }
 
