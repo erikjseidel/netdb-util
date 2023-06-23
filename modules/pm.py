@@ -15,6 +15,9 @@ __all__ = [
         'synchronize_session',
         'set_status',
         'create_policy',
+        'delete_policy',
+        'create_asn',
+        'peeringdb_asn_sync',
         ]
 
 _DATASOURCE = pm.PM_SOURCE['name']
@@ -77,6 +80,12 @@ class PeeringManager:
         return self
 
 
+    def set_suffix(self, suffix):
+        self.url += str(suffix) + '/'
+        self.public_url += str(suffix) + '/'
+        return self
+
+
     def get_public_url(self):
         return self.public_url
 
@@ -112,17 +121,27 @@ class PeeringManager:
         return json
 
 
-    def post(self, data):
+    def post(self, data=None):
         url = self.url
         logger.debug(f'PM.get: {url}')
-        resp = requests.post(url, headers = self._HEADERS, json = data )
+
+        if data:
+            resp = requests.post(url, headers = self._HEADERS, json = data)
+        else:
+            resp = requests.post(url, headers = self._HEADERS)
+
         code = resp.status_code
 
         result = False
         if code in range(200, 300):
             result = True
 
-        return result, resp.json()
+        if isinstance(resp, dict):
+            out = resp.json()
+        else:
+            out = None
+
+        return result, out
 
 
     def patch(self, data):
@@ -136,6 +155,19 @@ class PeeringManager:
             result = True
 
         return result, resp.json()
+
+
+    def delete(self):
+        url = self.url
+        logger.debug(f'PM.patch: {url}')
+        resp = requests.delete(url, headers = self._HEADERS)
+        code = resp.status_code
+
+        result = False
+        if code in range(200, 300):
+            result = True
+
+        return result
 
 
 class PMException(Exception):
@@ -187,6 +219,26 @@ def _search_ixp_sessions(device, ip):
     return None
 
 
+def _search_policies(name):
+    policies = PeeringManager('policies').get(q=name)
+
+    for policy in policies:
+        if policy.get('name') == name:
+            return policy.get('id')
+
+    return None
+
+
+def _search_asns(number):
+    asns = PeeringManager('asns').get(q=number)
+
+    for asn in asns:
+        if asn.get('asn') == number:
+            return asn.get('id')
+
+    return None
+
+
 def _create_policy(data):
     data_in = { k: v for k, v in data.items() if v }
 
@@ -202,6 +254,20 @@ def _create_policy(data):
         msg = 'Policy created'
 
     return result, ret, msg
+
+
+def _delete_policy(name):
+    id = _search_policies(name)
+    if not id:
+        return False, None, 'Policy not found in Peering Manager'
+
+    result = PeeringManager('policies').set_id(id).delete()
+
+    msg = 'PM API returned an error'
+    if result:
+        msg = 'Policy deleted'
+
+    return result, None, msg
 
 
 def _generate_policies(pm_object, policies, family):
@@ -223,6 +289,51 @@ def _generate_policies(pm_object, policies, family):
             out_policies[i] = generated
 
     return out_policies
+
+
+def _create_asn(data):
+    data_in = { k: v for k, v in data.items() if v }
+
+    try:
+        asn = pm_schema.AsnSchema().load(data_in)
+    except ValidationError as error:
+        return False, error.messages, 'invalid ASN data'
+
+    result, ret = PeeringManager('asns').post(asn)
+
+    msg = 'PM API returned an error'
+    if result:
+        msg = 'ASN created'
+
+    return result, ret, msg
+
+
+def _peeringdb_asn_sync(name):
+    id = _search_asns(name)
+    if not id:
+        return False, None, 'ASN not found in Peering Manager'
+
+    result, _  = PeeringManager('asns').set_id(id).set_suffix('sync-with-peeringdb').post()
+
+    msg = 'PM API returned an error'
+    if result:
+        msg = 'ASN synchronized from peeringdb'
+
+    return result, None, msg
+
+
+def _delete_asn(name):
+    id = _search_asns(name)
+    if not id:
+        return False, None, 'ASN not found in Peering Manager'
+
+    result = PeeringManager('asns').set_id(id).delete()
+
+    msg = 'PM API returned an error'
+    if result:
+        msg = 'ASN deleted'
+
+    return result, None, msg
 
 
 def _generate_direct_session_base(session, groups, asns, policies):
@@ -702,5 +813,46 @@ def create_policy(method, data, params):
         return _create_policy(data)
 
     except PMException as e:
-        logger.error(f'exception at pm.set_maintenance: {e.message}', exc_info=e)
+        logger.error(f'exception at pm.create_policy: {e.message}', exc_info=e)
+        return False, e.data, e.message
+
+
+@restful_method(methods=['DELETE'])
+def delete_policy(method, data, params):
+    name = params.get('name')
+
+    if not  isinstance(name, str):
+        return False, None, 'name parameter required'
+
+    try:
+        return _delete_policy(name)
+
+    except PMException as e:
+        logger.error(f'exception at pm.delete_policy: {e.message}', exc_info=e)
+        return False, e.data, e.message
+
+
+@restful_method(methods=['POST'])
+def create_asn(method, data, params):
+
+    try:
+        return _create_asn(data)
+
+    except PMException as e:
+        logger.error(f'exception at pm.create_asn: {e.message}', exc_info=e)
+        return False, e.data, e.message
+
+
+@restful_method(methods=['POST'])
+def peeringdb_asn_sync(method, data, params):
+    asn = params.get('asn')
+
+    if not asn:
+        return False, None, 'asn parameter required'
+
+    try:
+        return _peeringdb_asn_sync(int(asn))
+
+    except PMException as e:
+        logger.error(f'exception at pm.peeringdb_asn_sync: {e.message}', exc_info=e)
         return False, e.data, e.message
