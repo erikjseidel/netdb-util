@@ -674,23 +674,24 @@ def set_status(device, ip, status):
 
     data = { 'status': status }
 
+
     # Try direct sessions first
     if session_id := search_direct_sessions(device, ip):
-        endpoint = f'peering/direct-peering-sessions/{session_id}/'
+        api = PeeringManager('direct-sessions').set_id(session_id)
 
     # No direct sessions found; try IXP session
     elif session_id := search_ixp_sessions(device, ip):
-        endpoint = f'peering/internet-exchange-peering-sessions/{session_id}/'
+        api = PeeringManager('ixp-sessions').set_id(session_id)
 
     # No sessions found.
     else:
         return False, None, 'PM eBGP session not found.'
 
-    session = PeeringManager(endpoint).get()
+    session = api.get()
     if session['status'].get('value') == status:
         return False, None, 'Status not changed'
 
-    PeeringManager(endpoint).patch(data)
+    api.patch(data)
 
     # Synchronize netdb and return
     return synchronize_session(device, ip, test=False)
