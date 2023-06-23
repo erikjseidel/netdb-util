@@ -1,24 +1,7 @@
 import requests, json, logging, time, yaml, ipaddress, re
 from copy import deepcopy
-from util.decorators import restful_method
 from config import netbox
 from util import synchronizers
-
-# Public symbols
-__all__ = [
-        'synchronize_devices',
-        'synchronize_interfaces',
-        'synchronize_igp',
-        'synchronize_ebgp',
-        'generate_devices',
-        'generate_interfaces',
-        'generate_igp',
-        'generate_ebgp',
-        'update_ptrs',
-        'update_iface_descriptions',
-        'renumber',
-        'prune_ips',
-        ]
 
 _DATASOURCE = netbox.NETBOX_SOURCE['name']
 
@@ -136,7 +119,7 @@ class NetboxException(Exception):
         super().__init__(self.message)
 
 
-def _script_runner(script, data={}, commit=False):
+def script_runner(script, data={}, commit=False):
     """ 
     Used to run netbox scripts, poll the job for set number of seconds, and
     then return output from the job result. 
@@ -209,7 +192,7 @@ def _script_runner(script, data={}, commit=False):
     return True, out.get('out'), 'Dry Run: Database changes have been reverted automatically.'
 
 
-def _generate_devices():
+def generate_devices():
     ret = Netbox().gql(netbox.DEVICE_GQL)
 
     def _get_ip(device, tag):
@@ -294,7 +277,7 @@ def _generate_devices():
     return out
 
 
-def _generate_interfaces():
+def generate_interfaces():
     ret = Netbox().gql(netbox.IFACE_GQL)
 
     out = {}
@@ -477,7 +460,7 @@ def _generate_interfaces():
     return out
 
 
-def _generate_igp():
+def generate_igp():
     ret = Netbox().gql(netbox.IGP_GQL)
 
     out = {}
@@ -535,7 +518,7 @@ def _generate_igp():
     return out
 
 
-def _generate_ebgp():
+def generate_ebgp():
     ret = Netbox().gql(netbox.EBGP_GQL)
 
     out = {}
@@ -610,172 +593,25 @@ def _generate_ebgp():
     return out
 
 
-def _synchronize_devices(test = True):
-    netbox_dev = _generate_devices()
+def synchronize_devices(test = True):
+    netbox_dev = generate_devices()
 
     return synchronizers.devices(_DATASOURCE, netbox_dev, test)
 
 
 def _synchronize_interfaces(test=True):
-    netbox_ifaces = _generate_interfaces()
+    netbox_ifaces = generate_interfaces()
 
     return synchronizers.interfaces(_DATASOURCE, netbox_ifaces, test)
 
 
 def _synchronize_igp(test = True):
-    netbox_igp = _generate_igp()
+    netbox_igp = generate_igp()
 
     return synchronizers.igp(_DATASOURCE, netbox_igp, test)
 
 
 def _synchronize_ebgp(test=True):
-    netbox_ebgp = _generate_ebgp()
+    netbox_ebgp = generate_ebgp()
 
     return synchronizers.bgp_sessions(_DATASOURCE, netbox_ebgp, test)
-
-
-@restful_method
-def synchronize_devices(method, data, params):
-    test = True
-    if params.get('test') in ['false', 'False']:
-        test = False
-
-    try:
-        return _synchronize_devices(test)
-    except NetboxException as e:
-        return False, e.data, e.message
-
-
-@restful_method
-def generate_devices(method, data, params):
-    try:
-        data = _generate_devices()
-
-    except NetboxException as e:
-        logger.error(f'exception at netbox.generate_devices: {e.message}', exc_info=e)
-        return False, e.data, e.message
-
-    return True, data, 'Devices generated from Netbox datasource'
-
-
-@restful_method
-def synchronize_interfaces(method, data, params):
-    test = True
-    if params.get('test') in ['false', 'False']:
-        test = False
-
-    try:
-        return _synchronize_interfaces(test=test)
-    except NetboxException as e:
-        return False, e.data, e.message
-
-
-@restful_method
-def generate_interfaces(method, data, params):
-    try:
-        data = _generate_interfaces()
-    except NetboxException as e:
-        return False, { 'api_url': e.url, 'code': e.code }, e.message
-
-    return True, data, 'Interfaces generated from Netbox datasource'
-
-
-@restful_method
-def synchronize_igp(method, data, params):
-    test = True
-    if params.get('test') in ['false', 'False']:
-        test = False
-
-    try:
-        return _synchronize_igp(test)
-    except NetboxException as e:
-        return False, e.data, e.message
-
-
-@restful_method
-def generate_igp(method, data, params):
-    try:
-        data = _generate_igp()
-
-    except NetboxException as e:
-        logger.error(f'exception at netbox.generate_igp: {e.message}', exc_info=e)
-        return False, e.data, e.message
-
-    return True, data, 'IGP configuration generated from Netbox datasource'
-
-
-@restful_method
-def synchronize_ebgp(method, data, params):
-    test = True
-    if params.get('test') in ['false', 'False']:
-        test = False
-
-    try:
-        return _synchronize_ebgp(test)
-    except NetboxException as e:
-        return False, e.data, e.message
-
-
-@restful_method
-def generate_ebgp(method, data, params):
-    try:
-        data = _generate_ebgp()
-
-    except NetboxException as e:
-        logger.error(f'exception at netbox.generate_ebgp: {e.message}', exc_info=e)
-        return False, e.data, e.message
-
-    return True, data, 'Internal eBGP configuration generated from Netbox datasource'
-
-
-@restful_method
-def update_ptrs(method, data, params):
-    commit = False
-    if params.get('test') in ['false', 'False']:
-        commit = True
-
-    return _script_runner('update_ptrs.UpdatePTRs', commit=commit)
-
-
-@restful_method
-def update_iface_descriptions(method, data, params):
-    commit = False
-    if params.get('test') in ['false', 'False']:
-        commit = True
-
-    return _script_runner('update_iface_descriptions.UpdateIfaceDescriptions', commit=commit)
-
-
-@restful_method
-def renumber(method, data, params):
-    commit = False
-    if params.get('test') in ['false', 'False']:
-        commit = True
-
-    # Validate input parameters
-    if not ( ipv4 := params.get('ipv4') ):
-        return False, None, 'IPv4 prefix (ipv4) required'
-    try:
-        ipaddress.IPv4Network(ipv4)
-    except ValueError:
-        return False, None, 'Invald IPv4 prefix'
-
-    if not ( ipv6 := params.get('ipv6') ):
-        return False, None, 'IPv6 prefix (ipv6) required'
-    try:
-        ipaddress.IPv6Network(ipv6)
-    except ValueError:
-        return False, None, 'Invald IPv6 prefix'
-
-    data = { 'ipv4_prefix': ipv4, 'ipv6_prefix': ipv6 }
-
-    return _script_runner('renumber.GenerateNew', data, commit=commit)
-
-
-@restful_method
-def prune_ips(method, data, params):
-    commit = False
-    if params.get('test') in ['false', 'False']:
-        commit = True
-
-    return _script_runner('renumber.PruneIPs', commit=commit)

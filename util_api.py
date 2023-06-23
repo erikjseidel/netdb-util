@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-MODULE_PATH  = 'modules.'
+MODULE_PATH  = 'endpoints.'
 
 MOD_INVALID  = Response(response = json.dumps({ "result": False, "comment": "Invalid module"} ),
                         status = 404, mimetype = 'application/json')

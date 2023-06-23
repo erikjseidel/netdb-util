@@ -1,24 +1,9 @@
-import requests, json, logging, time, yaml, ipaddress
+import requests, json, logging, yaml, ipaddress
 from marshmallow import ValidationError
 from copy import deepcopy
-from util.decorators import restful_method
 from config import pm
 from schema import pm as pm_schema
 from util import synchronizers
-
-# Public symbols
-__all__ = [
-        'generate_direct_sessions',
-        'generate_ixp_sessions',
-        'generate_session',
-        'synchronize_sessions',
-        'synchronize_session',
-        'set_status',
-        'create_policy',
-        'delete_policy',
-        'create_asn',
-        'peeringdb_asn_sync',
-        ]
 
 _DATASOURCE = pm.PM_SOURCE['name']
 
@@ -185,7 +170,7 @@ class PMException(Exception):
         super().__init__(self.message)
 
 
-def _search_direct_sessions(device, ip):
+def search_direct_sessions(device, ip):
     try:
         ipaddress.ip_address(ip)
     except:
@@ -201,7 +186,7 @@ def _search_direct_sessions(device, ip):
     return None
 
 
-def _search_ixp_sessions(device, ip):
+def search_ixp_sessions(device, ip):
     try:
         ipaddress.ip_address(ip)
     except:
@@ -219,7 +204,7 @@ def _search_ixp_sessions(device, ip):
     return None
 
 
-def _search_policies(name):
+def search_policies(name):
     policies = PeeringManager('policies').get(q=name)
 
     for policy in policies:
@@ -229,7 +214,7 @@ def _search_policies(name):
     return None
 
 
-def _search_asns(number):
+def search_asns(number):
     asns = PeeringManager('asns').get(q=number)
 
     for asn in asns:
@@ -239,7 +224,7 @@ def _search_asns(number):
     return None
 
 
-def _create_policy(data):
+def create_policy(data):
     data_in = { k: v for k, v in data.items() if v }
 
     try:
@@ -256,8 +241,8 @@ def _create_policy(data):
     return result, ret, msg
 
 
-def _delete_policy(name):
-    id = _search_policies(name)
+def delete_policy(name):
+    id = search_policies(name)
     if not id:
         return False, None, 'Policy not found in Peering Manager'
 
@@ -270,7 +255,7 @@ def _delete_policy(name):
     return result, None, msg
 
 
-def _generate_policies(pm_object, policies, family):
+def generate_policies(pm_object, policies, family):
     # ASN / IXP etc.  policies for v4 and v6 groups together. We need to tease out the policies
     # for our family.
     policy_ids = {
@@ -291,7 +276,7 @@ def _generate_policies(pm_object, policies, family):
     return out_policies
 
 
-def _create_asn(data):
+def create_asn(data):
     data_in = { k: v for k, v in data.items() if v }
 
     try:
@@ -308,8 +293,8 @@ def _create_asn(data):
     return result, ret, msg
 
 
-def _peeringdb_asn_sync(name):
-    id = _search_asns(name)
+def peeringdb_asn_sync(name):
+    id = search_asns(name)
     if not id:
         return False, None, 'ASN not found in Peering Manager'
 
@@ -322,8 +307,8 @@ def _peeringdb_asn_sync(name):
     return result, None, msg
 
 
-def _delete_asn(name):
-    id = _search_asns(name)
+def delete_asn(name):
+    id = search_asns(name)
     if not id:
         return False, None, 'ASN not found in Peering Manager'
 
@@ -336,7 +321,7 @@ def _delete_asn(name):
     return result, None, msg
 
 
-def _generate_direct_session_base(session, groups, asns, policies):
+def generate_direct_session_base(session, groups, asns, policies):
     if ( status := session['status'].get('value') ) == 'disabled':
         return None
 
@@ -396,7 +381,7 @@ def _generate_direct_session_base(session, groups, asns, policies):
     asn_id = session['autonomous_system']['id']
     asn = asns.get(asn_id)
 
-    asn_policies = _generate_policies(asn, policies, family)
+    asn_policies = generate_policies(asn, policies, family)
 
     for i in ['import_routing_policies', 'export_routing_policies']:
         if 'reject' in tags or status == 'maintenance':
@@ -448,7 +433,7 @@ def _generate_direct_session_base(session, groups, asns, policies):
             }
 
 
-def _generate_ixp_session_base(session, connections, ixps, asns, policies):
+def generate_ixp_session_base(session, connections, ixps, asns, policies):
     if ( status := session['status'].get('value') ) == 'disabled':
         return None
 
@@ -499,10 +484,10 @@ def _generate_ixp_session_base(session, connections, ixps, asns, policies):
     asn = asns.get(asn_id)
 
     # Try to load policies for ASN
-    ixp_asn_policies = _generate_policies(asn, policies, family)
+    ixp_asn_policies = generate_policies(asn, policies, family)
     if not ixp_asn_policies:
         # No ASN policies found. Next try IXP.
-        ixp_asn_policies = _generate_policies(ixp, policies, family)
+        ixp_asn_policies = generate_policies(ixp, policies, family)
 
     # Add policies to BGP entry
     for i in ['import_routing_policies', 'export_routing_policies']:
@@ -553,7 +538,7 @@ def _generate_ixp_session_base(session, connections, ixps, asns, policies):
             }
 
 
-def _generate_direct_sessions():
+def generate_direct_sessions():
     sessions = PeeringManager('direct-sessions').get()
     groups   = { i.pop('id') : i for i in PeeringManager('groups').get() }
     asns     = { i.pop('id') : i for i in PeeringManager('asns').get() }
@@ -562,7 +547,7 @@ def _generate_direct_sessions():
     out = {}
     if sessions:
         for session in sessions:
-            result = _generate_direct_session_base(session, groups, asns, policies)
+            result = generate_direct_session_base(session, groups, asns, policies)
             if not result:
                 continue
 
@@ -573,7 +558,7 @@ def _generate_direct_sessions():
     return out
 
 
-def _generate_direct_session(id):
+def generate_direct_session(id):
     session = PeeringManager('direct-sessions').set_id(id).get()
 
     groups = {}
@@ -588,7 +573,7 @@ def _generate_direct_session(id):
 
     out = {}
     if session.get('id'):
-        result = _generate_direct_session_base(session, groups, asns, policies)
+        result = generate_direct_session_base(session, groups, asns, policies)
         if not result:
             return None
 
@@ -598,7 +583,7 @@ def _generate_direct_session(id):
     return out
 
 
-def _generate_ixp_sessions():
+def generate_ixp_sessions():
     # No fancy scripts or graphql in PM so just need to load a lot of stuff.
     sessions    = PeeringManager('ixp-sessions').get()
 
@@ -611,7 +596,7 @@ def _generate_ixp_sessions():
     out = {}
     if sessions:
         for session in sessions:
-            result = _generate_ixp_session_base(session, connections, ixps, asns, policies)
+            result = generate_ixp_session_base(session, connections, ixps, asns, policies)
             if not result:
                 continue
 
@@ -622,7 +607,7 @@ def _generate_ixp_sessions():
     return out
 
 
-def _generate_ixp_session(id):
+def generate_ixp_session(id):
     session = PeeringManager(f'ixp-sessions').set_id(id).get()
 
     c = PeeringManager('connections').set_id(session['ixp_connection']['id']).get()
@@ -638,7 +623,7 @@ def _generate_ixp_session(id):
 
     out = {}
     if session.get('id'):
-        result = _generate_ixp_session_base(session, connections, ixps, asns, policies)
+        result = generate_ixp_session_base(session, connections, ixps, asns, policies)
         if not result:
             return None
 
@@ -648,44 +633,43 @@ def _generate_ixp_session(id):
     return out
 
 
-def _generate_session(device, ip):
+def generate_session(device, ip):
     out = None
 
     # Try direct sessions first
-    if session_id := _search_direct_sessions(device, ip):
-        out = _generate_direct_session(session_id)
+    if session_id := search_direct_sessions(device, ip):
+        out = generate_direct_session(session_id)
 
     # No direct sessions found; try IXP session
-    elif session_id := _search_ixp_sessions(device, ip):
-        out = _generate_ixp_session(session_id)
+    elif session_id := search_ixp_sessions(device, ip):
+        out = generate_ixp_session(session_id)
 
     # No sessions found
     return out
 
 
-def _synchronize_sessions(test=True):
+def synchronize_sessions(test=True):
     # Load and validation
-    pm_sessions = _generate_ixp_sessions()
+    pm_sessions = generate_ixp_sessions()
      
     # Pull direct sessions and merge them on top of IXP sessions.
-    for session, neighbors in _generate_direct_sessions().items():
+    for session, neighbors in generate_direct_sessions().items():
         if not pm_sessions.get(session):
             pm_sessions[session] = { 'neighbors' : {} }
         for neighbor, bgp_data in neighbors.get('neighbors').items():
             pm_sessions[session]['neighbors'][neighbor] = bgp_data
 
-
     return synchronizers.bgp_sessions(_DATASOURCE, pm_sessions, test)
 
 
-def _synchronize_session(device, ip, test=True):
+def synchronize_session(device, ip, test=True):
     # Load and validation
-    pm_session = _generate_session(device, ip)
+    pm_session = generate_session(device, ip)
 
     return synchronizers.bgp_session(_DATASOURCE, pm_session, device, ip, test)
 
 
-def _set_status(device, ip, status):
+def set_status(device, ip, status):
     if status not in ['enabled', 'disabled', 'maintenance']:
         return False, None, 'invalid session status'
 
@@ -710,149 +694,4 @@ def _set_status(device, ip, status):
     PeeringManager(endpoint).patch(data)
 
     # Synchronize netdb and return
-    return _synchronize_session(device, ip, test=False)
-
-
-@restful_method
-def generate_direct_sessions(method, data, params):
-    try:
-        data = _generate_direct_sessions()
-
-    except PMException as e:
-        logger.error(f'exception at pm.generate_direct_sessions: {e.message}', exc_info=e)
-        return False, e.data, e.message
-
-    return True, data, 'eBGP direct sessions generated from Peering Manager datasource'
-
-
-@restful_method
-def generate_ixp_sessions(method, data, params):
-    try:
-        data = _generate_ixp_sessions()
-
-    except PMException as e:
-        logger.error(f'exception at pm.generate_ixp_sessions: {e.message}', exc_info=e)
-        return False, e.data, e.message
-
-    return True, data, 'eBGP IXP sessions generated from Peering Manager datasource'
-
-
-@restful_method
-def generate_session(method, data, params):
-    device = params.get('device')
-    ip = params.get('ip')
-
-    if not (device and ip):
-        return False, None, 'device and ip parameters required'
-
-    try:
-        data = _generate_session(device, ip)
-
-    except PMException as e:
-        logger.error(f'exception at pm.generate_session: {e.message}', exc_info=e)
-        return False, e.data, e.message
-
-    msg = f'eBGP session not found'
-    if data:
-        msg = 'eBGP session generated from Peering Manager datasource'
-
-    return bool(data), data, msg
-
-
-@restful_method
-def synchronize_sessions(method, data, params):
-    test = True
-    if params.get('test') in ['false', 'False']:
-        test = False
-
-    try:
-        return _synchronize_sessions(test)
-    except PMException as e:
-        return False, e.data, e.message
-
-
-@restful_method
-def synchronize_session(method, data, params):
-    device = params.get('device')
-    ip = params.get('ip')
-
-    if not (device and ip):
-        return False, None, 'device and ip parameters required'
-
-    test = True
-    if params.get('test') in ['false', 'False']:
-        test = False
-
-    try:
-        return _synchronize_session(device, ip, test)
-    except PMException as e:
-        return False, e.data, e.message
-
-
-@restful_method(methods=['PUT'])
-def set_status(method, data, params):
-    device = params.get('device')
-    ip = params.get('ip')
-    status = params.get('status')
-
-    if not (device and ip):
-        return False, None, 'device and ip parameters required'
-
-    try:
-        return _set_status(device, ip, status)
-
-    except PMException as e:
-        logger.error(f'exception at pm.set_maintenance: {e.message}', exc_info=e)
-        return False, e.data, e.message
-
-
-@restful_method(methods=['POST'])
-def create_policy(method, data, params):
-
-    try:
-        return _create_policy(data)
-
-    except PMException as e:
-        logger.error(f'exception at pm.create_policy: {e.message}', exc_info=e)
-        return False, e.data, e.message
-
-
-@restful_method(methods=['DELETE'])
-def delete_policy(method, data, params):
-    name = params.get('name')
-
-    if not  isinstance(name, str):
-        return False, None, 'name parameter required'
-
-    try:
-        return _delete_policy(name)
-
-    except PMException as e:
-        logger.error(f'exception at pm.delete_policy: {e.message}', exc_info=e)
-        return False, e.data, e.message
-
-
-@restful_method(methods=['POST'])
-def create_asn(method, data, params):
-
-    try:
-        return _create_asn(data)
-
-    except PMException as e:
-        logger.error(f'exception at pm.create_asn: {e.message}', exc_info=e)
-        return False, e.data, e.message
-
-
-@restful_method(methods=['POST'])
-def peeringdb_asn_sync(method, data, params):
-    asn = params.get('asn')
-
-    if not asn:
-        return False, None, 'asn parameter required'
-
-    try:
-        return _peeringdb_asn_sync(int(asn))
-
-    except PMException as e:
-        logger.error(f'exception at pm.peeringdb_asn_sync: {e.message}', exc_info=e)
-        return False, e.data, e.message
+    return synchronize_session(device, ip, test=False)
