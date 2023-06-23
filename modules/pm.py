@@ -648,7 +648,6 @@ def generate_session(device, ip):
 
 
 def synchronize_sessions(test=True):
-    # Load and validation
     pm_sessions = generate_ixp_sessions()
      
     # Pull direct sessions and merge them on top of IXP sessions.
@@ -662,7 +661,6 @@ def synchronize_sessions(test=True):
 
 
 def synchronize_session(device, ip, test=True):
-    # Load and validation
     pm_session = generate_session(device, ip)
 
     return synchronizers.bgp_session(_DATASOURCE, pm_session, device, ip, test)
@@ -673,7 +671,6 @@ def set_status(device, ip, status):
         return False, None, 'invalid session status'
 
     data = { 'status': status }
-
 
     # Try direct sessions first
     if session_id := search_direct_sessions(device, ip):
