@@ -676,11 +676,11 @@ def set_status(device, ip, status):
     data = { 'status': status }
 
     # Try direct sessions first
-    if session_id := _search_direct_sessions(device, ip):
+    if session_id := search_direct_sessions(device, ip):
         endpoint = f'peering/direct-peering-sessions/{session_id}/'
 
     # No direct sessions found; try IXP session
-    elif session_id := _search_ixp_sessions(device, ip):
+    elif session_id := search_ixp_sessions(device, ip):
         endpoint = f'peering/internet-exchange-peering-sessions/{session_id}/'
 
     # No sessions found.
