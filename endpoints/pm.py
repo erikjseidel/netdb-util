@@ -1,7 +1,6 @@
 import logging
 from util.decorators import restful_method
-from modules import pm
-from modules.pm import PMException
+from modules.pm import PeeringManagerUtility, PMException
 
 # Public symbols
 __all__ = [
@@ -22,7 +21,7 @@ logger = logging.getLogger(__name__)
 @restful_method
 def generate_direct_sessions(method, data, params):
     try:
-        data = pm.generate_direct_sessions()
+        data = PeeringManagerUtility().generate_direct_sessions()
 
     except PMException as e:
         logger.error(f'exception at pm.generate_direct_sessions: {e.message}', exc_info=e)
@@ -34,7 +33,7 @@ def generate_direct_sessions(method, data, params):
 @restful_method
 def generate_ixp_sessions(method, data, params):
     try:
-        data = pm.generate_ixp_sessions()
+        data = PeeringManagerUtility().generate_ixp_sessions()
 
     except PMException as e:
         logger.error(f'exception at pm.generate_ixp_sessions: {e.message}', exc_info=e)
@@ -52,7 +51,7 @@ def generate_session(method, data, params):
         return False, None, 'device and ip parameters required'
 
     try:
-        data = pm.generate_session(device, ip)
+        data = PeeringManagerUtility().generate_session(device, ip)
 
     except PMException as e:
         logger.error(f'exception at pm.generate_session: {e.message}', exc_info=e)
@@ -72,7 +71,7 @@ def synchronize_sessions(method, data, params):
         test = False
 
     try:
-        return pm.synchronize_sessions(test)
+        return PeeringManagerUtility(test).synchronize_sessions()
     except PMException as e:
         return False, e.data, e.message
 
@@ -90,7 +89,7 @@ def synchronize_session(method, data, params):
         test = False
 
     try:
-        return pm.synchronize_session(device, ip, test)
+        return PeeringManagerUtility(test).synchronize_session(device, ip)
     except PMException as e:
         return False, e.data, e.message
 
@@ -105,7 +104,7 @@ def set_status(method, data, params):
         return False, None, 'device and ip parameters required'
 
     try:
-        return pm.set_status(device, ip, status)
+        return PeeringManagerUtility().set_status(device, ip, status)
 
     except PMException as e:
         logger.error(f'exception at pm.set_maintenance: {e.message}', exc_info=e)
@@ -116,7 +115,7 @@ def set_status(method, data, params):
 def create_policy(method, data, params):
 
     try:
-        return pm.create_policy(data)
+        return PeeringManagerUtility().create_policy(data)
 
     except PMException as e:
         logger.error(f'exception at pm.create_policy: {e.message}', exc_info=e)
@@ -131,7 +130,7 @@ def delete_policy(method, data, params):
         return False, None, 'name parameter required'
 
     try:
-        return pm.delete_policy(name)
+        return PeeringManagerUtility().delete_policy(name)
 
     except PMException as e:
         logger.error(f'exception at pm.delete_policy: {e.message}', exc_info=e)
@@ -142,7 +141,7 @@ def delete_policy(method, data, params):
 def create_asn(method, data, params):
 
     try:
-        return pm.create_asn(data)
+        return PeeringManagerUtility().create_asn(data)
 
     except PMException as e:
         logger.error(f'exception at pm.create_asn: {e.message}', exc_info=e)
@@ -157,7 +156,7 @@ def peeringdb_asn_sync(method, data, params):
         return False, None, 'asn parameter required'
 
     try:
-        return pm.peeringdb_asn_sync(int(asn))
+        return PeeringManagerUtility().peeringdb_asn_sync(int(asn))
 
     except PMException as e:
         logger.error(f'exception at pm.peeringdb_asn_sync: {e.message}', exc_info=e)
