@@ -1,4 +1,4 @@
-from .secrets import NETBOX_TOKEN, NETBOX_BASE, URL_BASE
+from .secrets import NETBOX_TOKEN, NETBOX_URL, NETBOX_PUBLIC_URL
 
 NETBOX_HEADERS = {
             'Content-Type'  : 'application/json',

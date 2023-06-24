@@ -102,6 +102,10 @@ class PeeringManagerAPI:
         return self
 
 
+    def get_url(self):
+        return self.url
+
+
     def get_public_url(self):
         return self.public_url
 

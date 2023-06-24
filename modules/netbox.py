@@ -26,23 +26,38 @@ _VYOS_PARENT  = "^(eth|bond)([0-9]{1,3})(?:(\.)([0-9]{1,4})){0,1}$"
 
 logger = logging.getLogger(__name__)
 
-class Netbox:
-    _BASE = netbox.NETBOX_BASE
+class NetboxAPI:
+    _API_BASE = netbox.NETBOX_URL + '/api'
+
+    _PUBLIC_API_BASE = netbox.NETBOX_PUBLIC_URL
+
     _HEADERS = netbox.NETBOX_HEADERS
+
+    _GRAPHQL_BASE = netbox.NETBOX_URL + '/graphql/'
+
+    ENDPOINTS = {}
     
     def __init__(self, endpoint=None):
         self.set(endpoint)
 
 
     def set(self, endpoint):
-        self.url = self._BASE + '/api'
+        self.url = self._API_BASE
+        self.public_url = self._PUBLIC_API_BASE
 
         if endpoint:
+            if endpoint in self.ENDPOINTS.keys():
+                endpoint = self.ENDPOINTS[endpoint]
+
             if not endpoint.startswith('/'):
                 self.url += '/'
+                self.public_url += '/'
             if not endpoint.endswith('/'):
                 endpoint += '/'
+
             self.url += endpoint
+            self.public_url += endpoint
+
         return self
 
 
@@ -51,30 +66,58 @@ class Netbox:
         return self
 
 
-    def get(self, **kwargs):
-        url = self.url + '?'
+    def set_id(self, id):
+        self.url += str(id) + '/'
+        self.public_url += str(id) + '/'
+        return self
+
+
+    def set_suffix(self, suffix):
+        self.url += str(suffix) + '/'
+        self.public_url += str(suffix) + '/'
+        return self
+
+
+    def set_params(self, **kwargs):
+        suffix = '?'
 
         tags = kwargs.pop('tags', None)
 
         for k, v in kwargs.items():
             if v:
-                url += '%s=%s&' % (k, v)
+                suffix += '%s=%s&' % (k, v)
 
         if tags:
             if isinstance(tags, list):
                 for tag in tags:
-                    url += 'tag=%s&' % tag
+                    suffix += 'tag=%s&' % tag
             else:
-                url += 'tag=%s' % tags
+                suffix += 'tag=%s' % tags
 
-        # clean up url
-        if url.endswith('?') or url.endswith('&'):
-            url = url[:-1]
+        # clean up url suffix
+        if suffix.endswith('?') or suffix.endswith('&'):
+            suffix = suffix[:-1]
 
+        self.url += suffix
+        self.public_url += suffix
+
+        return self
+
+
+    def get_url(self):
+        return self.url
+
+
+    def get_public_url(self):
+        return self.public_url
+
+
+    def get(self):
+        url = self.url
         logger.debug(f'Netbox.get: {url}')
         resp = requests.get(url, headers = self._HEADERS)
         
-        if (code := resp.status_code) != 200:
+        if (code := resp.status_code) not in [200, 404]:
             raise NetboxException(url, resp.json(), code)
 
         if 'results' in ( json := resp.json() ):
@@ -84,7 +127,30 @@ class Netbox:
 
     def post(self, data):
         url = self.url
-        logger.debug(f'Netbox.get: {url}')
+        logger.debug(f'NetboxAPI.post: {url}')
+
+        if data:
+            resp = requests.post(url, headers = self._HEADERS, json = data )
+        else:
+            resp = requests.post(url, headers = self._HEADERS)
+
+        code = resp.status_code
+
+        result = False
+        if code in range(200, 300):
+            result = True
+
+        if isinstance(resp, dict):
+            out = resp.json()
+        else:
+            out = None
+
+        return result, out
+
+
+    def call_script(self, data):
+        url = self.url
+        logger.debug(f'NetboxAPI.call_script: {url}')
         resp = requests.post(url, headers = self._HEADERS, json = data )
 
         if 'results' in ( js := resp.json() ):
@@ -94,7 +160,7 @@ class Netbox:
 
 
     def gql(self, query):
-        url = self._BASE + '/graphql/'
+        url = self._GRAPHQL_BASE
         resp = requests.post(url, headers=self._HEADERS, json={"query": query})
         logger.debug(f'Netbox.gql: {url} {query}')
 
@@ -126,9 +192,11 @@ def script_runner(script, data={}, commit=False):
 
     Uses data prepared by public methods. Expects yaml formatted output.
     """
-    nb = Netbox('/extras/scripts/' + script)
+    nb = NetboxAPI('extras/scripts').set_suffix(script)
 
-    result = nb.post({ 'data': data, 'commit': commit })
+    print(nb.get_url())
+
+    result = nb.call_script({ 'data': data, 'commit': commit })
 
     # Location of the script's job
     url = result['url']
@@ -193,7 +261,7 @@ def script_runner(script, data={}, commit=False):
 
 
 def generate_devices():
-    ret = Netbox().gql(netbox.DEVICE_GQL)
+    ret = NetboxAPI().gql(netbox.DEVICE_GQL)
 
     def _get_ip(device, tag):
         for iface in device['loopbacks']:
@@ -244,7 +312,7 @@ def generate_devices():
                     or device['status'].lower() not in ['active', 'staged'] ):
                 continue
 
-            url = f"{netbox.URL_BASE}/dcim/devices/{device['id']}/"
+            url = NetboxAPI('dcim/devices').set_id(device['id']).get_public_url()
 
             entry = {
                     'location'   : device['site']['region']['slug'],
@@ -278,7 +346,7 @@ def generate_devices():
 
 
 def generate_interfaces():
-    ret = Netbox().gql(netbox.IFACE_GQL)
+    ret = NetboxAPI().gql(netbox.IFACE_GQL)
 
     out = {}
     if ret['data']:
@@ -292,7 +360,7 @@ def generate_interfaces():
             type = interface['type']
             tags = [ i['name'] for i in interface['tags'] ]
 
-            url = f"{netbox.URL_BASE}/dcim/interfaces/{interface['id']}/"
+            url = NetboxAPI('dcim/interfaces').set_id(interface['id']).get_public_url()
 
             # unmanaged / decom / hypervisor tagged interfaces are ignored
             if 'unmanaged' in tags or 'decom' in tags or 'hypervisor' in tags:
@@ -322,7 +390,7 @@ def generate_interfaces():
 
             addrs = {}
             for address in interface['ip_addresses']:
-                url = f"{netbox.URL_BASE}/ipam/ip-addresses/{address['id']}/"
+                url = NetboxAPI('ipam/ip-addresses').set_id(address['id']).get_public_url()
 
                 meta =  {
                         'netbox' : {
@@ -461,7 +529,7 @@ def generate_interfaces():
 
 
 def generate_igp():
-    ret = Netbox().gql(netbox.IGP_GQL)
+    ret = NetboxAPI().gql(netbox.IGP_GQL)
 
     out = {}
     if ret['data']:
@@ -519,7 +587,7 @@ def generate_igp():
 
 
 def generate_ebgp():
-    ret = Netbox().gql(netbox.EBGP_GQL)
+    ret = NetboxAPI().gql(netbox.EBGP_GQL)
 
     out = {}
     if ret['data']:
@@ -599,19 +667,19 @@ def synchronize_devices(test = True):
     return synchronizers.devices(_DATASOURCE, netbox_dev, test)
 
 
-def _synchronize_interfaces(test=True):
+def synchronize_interfaces(test=True):
     netbox_ifaces = generate_interfaces()
 
     return synchronizers.interfaces(_DATASOURCE, netbox_ifaces, test)
 
 
-def _synchronize_igp(test = True):
+def synchronize_igp(test = True):
     netbox_igp = generate_igp()
 
     return synchronizers.igp(_DATASOURCE, netbox_igp, test)
 
 
-def _synchronize_ebgp(test=True):
+def synchronize_ebgp(test=True):
     netbox_ebgp = generate_ebgp()
 
     return synchronizers.bgp_sessions(_DATASOURCE, netbox_ebgp, test)
