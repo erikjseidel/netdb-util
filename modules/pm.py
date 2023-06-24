@@ -5,6 +5,8 @@ from config import pm
 from schema import pm as pm_schema
 from util import synchronizers
 
+from pprint import pprint
+
 _DATASOURCE = pm.PM_SOURCE['name']
 
 _DEFAULT_REJECT = 'REJECT-ALL'
@@ -29,10 +31,16 @@ class PeeringManager:
         'asns'            : 'peering/autonomous-systems',
         'ixps'            : 'peering/internet-exchanges',
         'connections'     : 'net/connections',
+        'relationships'   : 'bgp/relationships',
         }
 
     def __init__(self, endpoint=None):
+        self.clear_cache()
         self.set(endpoint)
+
+
+    def clear_cache(self):
+        self._GET_CACHE = {}
 
 
     def set(self, endpoint):
@@ -70,32 +78,48 @@ class PeeringManager:
         return self
 
 
-    def get_public_url(self):
-        return self.public_url
-
-
-    def get(self, **kwargs):
-        url = self.url + '?'
+    def set_params(self, **kwargs):
+        suffix = '?'
 
         tags = kwargs.pop('tags', None)
 
         for k, v in kwargs.items():
             if v:
-                url += '%s=%s&' % (k, v)
+                suffix += '%s=%s&' % (k, v)
 
         if tags:
             if isinstance(tags, list):
                 for tag in tags:
-                    url += 'tag=%s&' % tag
+                    suffix += 'tag=%s&' % tag
             else:
-                url += 'tag=%s' % tags
+                suffix += 'tag=%s' % tags
 
-        # clean up url
-        if url.endswith('?') or url.endswith('&'):
-            url = url[:-1]
+        # clean up url suffix
+        if suffix.endswith('?') or suffix.endswith('&'):
+            suffix = suffix[:-1]
 
+        self.url += suffix
+        self.public_url += suffix
+
+        return self
+
+
+    def get_public_url(self):
+        return self.public_url
+
+
+    def get(self):
+        url = self.url
         logger.debug(f'PM.get: {url}')
-        resp = requests.get(url, headers = self._HEADERS)
+
+        # In case of get, the instantiation caches queries. Check to see if
+        # this  instantiation has already queried and cached. if cached, use
+        # the cached version, otherwise query the PM API.
+        resp = self._GET_CACHE.get(url)
+        if not resp:
+            print(url)
+            resp = requests.get(url, headers = self._HEADERS)
+            self._GET_CACHE[url] = resp
         
         if (code := resp.status_code) not in [200, 404]:
             raise PMException(url, resp.json(), code)
@@ -169,13 +193,16 @@ class PMException(Exception):
         super().__init__(self.message)
 
 
-def search_direct_sessions(device, ip):
+def search_direct_sessions(device, ip, pm_api=None):
     try:
         ipaddress.ip_address(ip)
     except:
         return None
 
-    sessions = PeeringManager('direct-sessions').get(q=ip)
+    if not pm_api:
+        pm_api = PeeringManager()
+
+    sessions = pm_api.set('direct-sessions').set_params(q=ip).get()
 
     for session in sessions:
         if ( session['router'].get('name') == device 
@@ -185,14 +212,17 @@ def search_direct_sessions(device, ip):
     return None
 
 
-def search_ixp_sessions(device, ip):
+def search_ixp_sessions(device, ip, pm_api=None):
     try:
         ipaddress.ip_address(ip)
     except:
         return None
 
-    sessions = PeeringManager('ixp-sessions').get(q=ip)
-    connections = { i.pop('id') : i for i in PeeringManager('connections').get() }
+    if not pm_api:
+        pm_api = PeeringManager()
+
+    sessions = pm_api.set('ixp-sessions').set_params(q=ip).get()
+    connections = { i.pop('id') : i for i in pm_api.set('connections').get() }
 
     for session in sessions:
         connection_id = session['ixp_connection'].get('id')
@@ -203,8 +233,11 @@ def search_ixp_sessions(device, ip):
     return None
 
 
-def search_policies(name):
-    policies = PeeringManager('policies').get(q=name)
+def search_policies(name, pm_api=None):
+    if not pm_api:
+        pm_api = PeeringManager()
+
+    policies = pm_api.set('policies').set_params(q=name).get()
 
     for policy in policies:
         if policy.get('name') == name:
@@ -213,8 +246,11 @@ def search_policies(name):
     return None
 
 
-def search_asns(number):
-    asns = PeeringManager('asns').get(q=number)
+def search_asns(number, pm_api=None):
+    if not pm_api:
+        pm_api = PeeringManager()
+
+    asns = pm_api.set('asns').set_params(q=number).get()
 
     for asn in asns:
         if asn.get('asn') == number:
@@ -223,15 +259,18 @@ def search_asns(number):
     return None
 
 
-def create_policy(data):
+def create_policy(data, pm_api=None):
     data_in = { k: v for k, v in data.items() if v }
+
+    if not pm_api:
+        pm_api = PeeringManager()
 
     try:
         policy = pm_schema.PolicySchema().load(data_in)
     except ValidationError as error:
         return False, error.messages, 'invalid policy data'
 
-    result, ret = PeeringManager('policies').post(policy)
+    result, ret = pm_api.set('policies').post(policy)
 
     msg = 'PM API returned an error'
     if result:
@@ -240,8 +279,11 @@ def create_policy(data):
     return result, ret, msg
 
 
-def delete_policy(name):
-    id = search_policies(name)
+def delete_policy(name, pm_api):
+    if not pm_api:
+        pm_api = PeeringManager()
+
+    id = search_policies(name, pm_api)
     if not id:
         return False, None, 'Policy not found in Peering Manager'
 
@@ -275,15 +317,18 @@ def generate_policies(pm_object, policies, family):
     return out_policies
 
 
-def create_asn(data):
+def create_asn(data, pm_api=None):
     data_in = { k: v for k, v in data.items() if v }
+
+    if not pm_api:
+        pm_api = PeeringManager()
 
     try:
         asn = pm_schema.AsnSchema().load(data_in)
     except ValidationError as error:
         return False, error.messages, 'invalid ASN data'
 
-    result, ret = PeeringManager('asns').post(asn)
+    result, ret = pm_api.set('asns').post(asn)
 
     msg = 'PM API returned an error'
     if result:
@@ -292,12 +337,15 @@ def create_asn(data):
     return result, ret, msg
 
 
-def peeringdb_asn_sync(name):
-    id = search_asns(name)
+def peeringdb_asn_sync(name, pm_api):
+    if not pm_api:
+        pm_api = PeeringManager()
+
+    id = search_asns(name, pm_api)
     if not id:
         return False, None, 'ASN not found in Peering Manager'
 
-    result, _  = PeeringManager('asns').set_id(id).set_suffix('sync-with-peeringdb').post()
+    result, _  = pm_api.set('asns').set_id(id).set_suffix('sync-with-peeringdb').post()
 
     msg = 'PM API returned an error'
     if result:
@@ -306,12 +354,15 @@ def peeringdb_asn_sync(name):
     return result, None, msg
 
 
-def delete_asn(name):
-    id = search_asns(name)
+def delete_asn(name, pm_api):
+    if not pm_api:
+        pm_api = PeeringManager()
+
+    id = search_asns(name, pm_api)
     if not id:
         return False, None, 'ASN not found in Peering Manager'
 
-    result = PeeringManager('asns').set_id(id).delete()
+    result = pm_api.set('asns').set_id(id).delete()
 
     msg = 'PM API returned an error'
     if result:
@@ -320,9 +371,17 @@ def delete_asn(name):
     return result, None, msg
 
 
-def generate_direct_session_base(session, groups, asns, policies):
+def generate_direct_session_base(session, pm_api=None):
     if ( status := session['status'].get('value') ) == 'disabled':
         return None
+
+    if not pm_api:
+        pm_api = PeeringManager()
+
+    # Turn these into `id' keyed dicts for quick lookups. 
+    groups   = { i.pop('id') : i for i in pm_api.set('groups').get() }
+    asns     = { i.pop('id') : i for i in pm_api.set('asns').get() }
+    policies = { i.pop('id') : i for i in pm_api.set('policies').get() }
 
     session_id = int(session['id'])
 
@@ -432,9 +491,18 @@ def generate_direct_session_base(session, groups, asns, policies):
             }
 
 
-def generate_ixp_session_base(session, connections, ixps, asns, policies):
+def generate_ixp_session_base(session, pm_api=None):
     if ( status := session['status'].get('value') ) == 'disabled':
         return None
+
+    if not pm_api:
+        pm_api = PeeringManager()
+
+    # Turn these into `id' keyed dicts for quick lookups. 
+    connections = { i.pop('id') : i for i in pm_api.set('connections').get() }
+    ixps        = { i.pop('id') : i for i in pm_api.set('ixps').get() }
+    asns        = { i.pop('id') : i for i in pm_api.set('asns').get() }
+    policies    = { i.pop('id') : i for i in pm_api.set('policies').get() }
 
     session_id = int(session['id'])
 
@@ -537,16 +605,16 @@ def generate_ixp_session_base(session, connections, ixps, asns, policies):
             }
 
 
-def generate_direct_sessions():
-    sessions = PeeringManager('direct-sessions').get()
-    groups   = { i.pop('id') : i for i in PeeringManager('groups').get() }
-    asns     = { i.pop('id') : i for i in PeeringManager('asns').get() }
-    policies = { i.pop('id') : i for i in PeeringManager('policies').get() }
+def generate_direct_sessions(pm_api=None):
+    if not pm_api:
+        pm_api = PeeringManager()
+
+    sessions = pm_api('direct-sessions').get()
 
     out = {}
     if sessions:
         for session in sessions:
-            result = generate_direct_session_base(session, groups, asns, policies)
+            result = generate_direct_session_base(session, pm_api)
             if not result:
                 continue
 
@@ -557,22 +625,15 @@ def generate_direct_sessions():
     return out
 
 
-def generate_direct_session(id):
-    session = PeeringManager('direct-sessions').set_id(id).get()
+def generate_direct_session(id, pm_api=None):
+    if not pm_api:
+        pm_api = PeeringManager()
 
-    groups = {}
-    if session['bgp_group'] and ( group_id := session['bgp_group'].get('id') ):
-        g = PeeringManager('groups').set_id(group_id).get()
-        groups = { g.pop('id') : g }
-
-    a = PeeringManager('asns').set_id(session['autonomous_system']['id']).get()
-    asns = { a.pop('id') : a }
-
-    policies = { i.pop('id') : i for i in PeeringManager('policies').get() }
+    session = pm_api.set('direct-sessions').set_id(id).get()
 
     out = {}
     if session.get('id'):
-        result = generate_direct_session_base(session, groups, asns, policies)
+        result = generate_direct_session_base(session, pm_api)
         if not result:
             return None
 
@@ -582,20 +643,16 @@ def generate_direct_session(id):
     return out
 
 
-def generate_ixp_sessions():
-    # No fancy scripts or graphql in PM so just need to load a lot of stuff.
-    sessions    = PeeringManager('ixp-sessions').get()
+def generate_ixp_sessions(pm_api=None):
+    if not pm_api:
+        pm_api = PeeringManager()
 
-    # Turn these into `id' keyed dicts for quick lookups. 
-    connections = { i.pop('id') : i for i in PeeringManager('connections').get() }
-    ixps        = { i.pop('id') : i for i in PeeringManager('ixps').get() }
-    asns        = { i.pop('id') : i for i in PeeringManager('asns').get() }
-    policies    = { i.pop('id') : i for i in PeeringManager('policies').get() }
+    sessions = pm_api.set('ixp-sessions').get()
 
     out = {}
     if sessions:
         for session in sessions:
-            result = generate_ixp_session_base(session, connections, ixps, asns, policies)
+            result = generate_ixp_session_base(session, pm_api)
             if not result:
                 continue
 
@@ -606,23 +663,16 @@ def generate_ixp_sessions():
     return out
 
 
-def generate_ixp_session(id):
-    session = PeeringManager(f'ixp-sessions').set_id(id).get()
+def generate_ixp_session(id, pm_api=None):
+    if not pm_api:
+        pm_api = PeeringManager()
 
-    c = PeeringManager('connections').set_id(session['ixp_connection']['id']).get()
-    connections = { c.pop('id') : c}
+    session = pm_api.set('ixp-sessions').set_id(id).get()
 
-    i = PeeringManager('ixps').set_id(c['internet_exchange_point']['id']).get()
-    ixps = { i.pop('id') : i}
-
-    a = PeeringManager('asns').set_id(session['autonomous_system']['id']).get()
-    asns = { a.pop('id') : a }
-
-    policies = { i.pop('id') : i for i in PeeringManager('policies').get() }
 
     out = {}
     if session.get('id'):
-        result = generate_ixp_session_base(session, connections, ixps, asns, policies)
+        result = generate_ixp_session_base(session, pm_api)
         if not result:
             return None
 
@@ -632,26 +682,26 @@ def generate_ixp_session(id):
     return out
 
 
-def generate_session(device, ip):
+def generate_session(device, ip, pm_api=None):
     out = None
 
     # Try direct sessions first
-    if session_id := search_direct_sessions(device, ip):
-        out = generate_direct_session(session_id)
+    if session_id := search_direct_sessions(device, ip, pm_api):
+        out = generate_direct_session(session_id, pm_api)
 
     # No direct sessions found; try IXP session
-    elif session_id := search_ixp_sessions(device, ip):
-        out = generate_ixp_session(session_id)
+    elif session_id := search_ixp_sessions(device, ip, pm_api):
+        out = generate_ixp_session(session_id, pm_api)
 
     # No sessions found
     return out
 
 
-def synchronize_sessions(test=True):
-    pm_sessions = generate_ixp_sessions()
+def synchronize_sessions(pm_api=None, test=True):
+    pm_sessions = generate_ixp_sessions(pm_api)
      
     # Pull direct sessions and merge them on top of IXP sessions.
-    for session, neighbors in generate_direct_sessions().items():
+    for session, neighbors in generate_direct_sessions(pm_api).items():
         if not pm_sessions.get(session):
             pm_sessions[session] = { 'neighbors' : {} }
         for neighbor, bgp_data in neighbors.get('neighbors').items():
@@ -660,8 +710,8 @@ def synchronize_sessions(test=True):
     return synchronizers.bgp_sessions(_DATASOURCE, pm_sessions, test)
 
 
-def synchronize_session(device, ip, test=True):
-    pm_session = generate_session(device, ip)
+def synchronize_session(device, ip, pm_api=None, test=True):
+    pm_session = generate_session(device, ip, pm_api)
 
     return synchronizers.bgp_session(_DATASOURCE, pm_session, device, ip, test)
 
@@ -674,21 +724,23 @@ def set_status(device, ip, status):
 
     # Try direct sessions first
     if session_id := search_direct_sessions(device, ip):
-        api = PeeringManager('direct-sessions').set_id(session_id)
+        pm_api = PeeringManager('direct-sessions').set_id(session_id)
 
     # No direct sessions found; try IXP session
     elif session_id := search_ixp_sessions(device, ip):
-        api = PeeringManager('ixp-sessions').set_id(session_id)
+        pm_api = PeeringManager('ixp-sessions').set_id(session_id)
 
     # No sessions found.
     else:
         return False, None, 'PM eBGP session not found.'
 
-    session = api.get()
+    session = pm_api.get()
     if session['status'].get('value') == status:
         return False, None, 'Status not changed'
 
-    api.patch(data)
+    pm_api.patch(data)
+
+    pm_api.clear_cache()
 
     # Synchronize netdb and return
-    return synchronize_session(device, ip, test=False)
+    return synchronize_session(device, ip, pm_api, test=False)
