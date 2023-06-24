@@ -122,9 +122,9 @@ class DjangoAPI:
         if code in range(200, 300):
             result = True
 
-        if isinstance(resp, dict):
+        try:
             out = resp.json()
-        else:
+        except ValueError:
             out = None
 
         self.clear_cache()

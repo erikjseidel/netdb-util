@@ -14,6 +14,7 @@ __all__ = [
         'delete_policy',
         'create_asn',
         'peeringdb_asn_sync',
+        'create_direct_session',
         ]
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ def synchronize_sessions(method, data, params):
     try:
         return PeeringManagerUtility(test).synchronize_sessions()
     except PMException as e:
+        logger.error(f'exception at pm.synchronize_sessions: {e.message}', exc_info=e)
         return False, e.data, e.message
 
 
@@ -91,6 +93,7 @@ def synchronize_session(method, data, params):
     try:
         return PeeringManagerUtility(test).synchronize_session(device, ip)
     except PMException as e:
+        logger.error(f'exception at pm.synchronize_session: {e.message}', exc_info=e)
         return False, e.data, e.message
 
 
@@ -107,7 +110,7 @@ def set_status(method, data, params):
         return PeeringManagerUtility().set_status(device, ip, status)
 
     except PMException as e:
-        logger.error(f'exception at pm.set_maintenance: {e.message}', exc_info=e)
+        logger.error(f'exception at pm.set_status: {e.message}', exc_info=e)
         return False, e.data, e.message
 
 
@@ -160,4 +163,15 @@ def peeringdb_asn_sync(method, data, params):
 
     except PMException as e:
         logger.error(f'exception at pm.peeringdb_asn_sync: {e.message}', exc_info=e)
+        return False, e.data, e.message
+
+
+@restful_method(methods=['POST'])
+def create_direct_session(method, data, params):
+
+    try:
+        return PeeringManagerUtility().create_direct_session(data)
+
+    except PMException as e:
+        logger.error(f'exception at pm.create_direct_session: {e.message}', exc_info=e)
         return False, e.data, e.message

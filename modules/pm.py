@@ -8,8 +8,6 @@ from util.django_api import DjangoAPI
 
 _DATASOURCE = pm.PM_SOURCE['name']
 
-_DEFAULT_REJECT = 'REJECT-ALL'
-
 logger = logging.getLogger(__name__)
 
 class PeeringManagerAPI(DjangoAPI):
@@ -29,6 +27,7 @@ class PeeringManagerAPI(DjangoAPI):
         'groups'          : 'peering/bgp-groups',
         'asns'            : 'peering/autonomous-systems',
         'ixps'            : 'peering/internet-exchanges',
+        'routers'         : 'peering/routers',
         'connections'     : 'net/connections',
         'relationships'   : 'bgp/relationships',
         }
@@ -54,6 +53,7 @@ class PeeringManagerUtility:
     def __init__(self, test=False):
         self.test = test
         self.pm_api = PeeringManagerAPI()
+
 
     def search_direct_sessions(self, device, ip):
         try:
@@ -105,6 +105,26 @@ class PeeringManagerUtility:
         for asn in asns:
             if asn.get('asn') == number:
                 return asn.get('id')
+
+        return None
+
+
+    def search_relationships(self, slug):
+        relationships = self.pm_api.set('relationships').set_params(q=slug).get()
+
+        for relationship in relationships:
+            if relationship.get('slug') == slug:
+                return relationship.get('id')
+
+        return None
+
+
+    def search_routers(self, name):
+        routers = self.pm_api.set('routers').set_params(name=name).get()
+
+        for router in routers:
+            if router.get('name') == name:
+                return router.get('id')
 
         return None
 
@@ -191,7 +211,7 @@ class PeeringManagerUtility:
             msg = 'ASN synchronized from peeringdb'
 
         return result, None, msg
-
+        
 
     def delete_asn(self, name):
 
@@ -206,6 +226,64 @@ class PeeringManagerUtility:
             msg = 'ASN deleted'
 
         return result, None, msg
+
+
+    def create_direct_session(self, data):
+
+        CHILD_VARS = {
+                'local_asn' : 'local_autonomous_system',
+                'peer_asn'  : 'autonomous_system',
+                'type'      : 'relationship',
+                'import'    : 'import_routing_policies',
+                'export'    : 'export_routing_policies',
+                'device'    : 'router',
+                }
+
+        CHILD_METHODS = {
+                'local_asn' : self.search_asns,
+                'peer_asn'  : self.search_asns,
+                'type'      : self.search_relationships,
+                'import'    : self.search_policies,
+                'export'    : self.search_policies,
+                'device'    : self.search_routers,
+                }
+
+        # PM will allow addition of multiple sessions with the same device
+        # and remote IP. Prevent this from happening via netb-util calls.
+        device = data.get('device')
+        remote_ip = data.get('remote_ip')
+        if self.search_direct_sessions(device, remote_ip):
+            return False, None, f'{remote_ip} at {device}: session already exists'
+
+        if status := data.get('status'):
+            if status not in pm_schema.PM_STATUS:
+                return False, None, 'Invalid session status'
+
+        data_in = {}
+
+        # Populate the child relationships
+        for k, v in CHILD_VARS.items():
+            if child := data.pop(k, None):
+                if id := CHILD_METHODS[k](child):
+                    data_in[v] = id
+                else:
+                    return False, None, f'{k} {child} not found in PM'
+
+        # Update data_in with remaining input data
+        data_in.update({ k: v for k, v in data.items() if v })
+
+        try:
+            session = pm_schema.DirectSessionSchema().load(data_in)
+        except ValidationError as error:
+            return False, error.messages, 'invalid session data'
+
+        result, ret = self.pm_api.set('direct-sessions').post(session)
+
+        msg = 'PM API returned an error'
+        if result:
+            msg = 'Direct session created'
+
+        return result, ret, msg
 
 
     def generate_direct_session_base(self, session):
@@ -275,7 +353,7 @@ class PeeringManagerUtility:
 
         for i in ['import_routing_policies', 'export_routing_policies']:
             if 'reject' in tags or status == 'maintenance':
-                route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
+                route_map[ i.split('_')[0] ] = pm_schema.DEFAULT_REJECT
             elif len(session[i]) > 0:
                 route_map[ i.split('_')[0] ] = session[i][0]['name']
             elif group and len(group[i]) > 0:
@@ -284,7 +362,7 @@ class PeeringManagerUtility:
                 # If no session or group policies, we can try ASN
                 route_map[ i.split('_')[0] ] = asn_policies[i][0]
             else:
-                route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
+                route_map[ i.split('_')[0] ] = pm_schema.DEFAULT_REJECT
 
         addr_fam['route_map'] = route_map
 
@@ -388,7 +466,7 @@ class PeeringManagerUtility:
         # Add policies to BGP entry
         for i in ['import_routing_policies', 'export_routing_policies']:
             if 'reject' in tags or status == 'maintenance':
-                route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
+                route_map[ i.split('_')[0] ] = pm_schema.DEFAULT_REJECT
             elif len(session[i]) > 0:
                 # Session policies have highest priority
                 route_map[ i.split('_')[0] ] = session[i][0]['name']
@@ -396,7 +474,7 @@ class PeeringManagerUtility:
                 # If no session policies, we can try ASN or IXP
                 route_map[ i.split('_')[0] ] = ixp_asn_policies[i][0]
             else:
-                route_map[ i.split('_')[0] ] = _DEFAULT_REJECT
+                route_map[ i.split('_')[0] ] = pm_schema.DEFAULT_REJECT
 
         addr_fam['route_map'] = route_map
 
@@ -535,7 +613,7 @@ class PeeringManagerUtility:
 
 
     def set_status(self, device, ip, status):
-        if status not in ['enabled', 'disabled', 'maintenance']:
+        if status not in pm_schema.PM_STATUS:
             return False, None, 'invalid session status'
 
         data = { 'status': status }
