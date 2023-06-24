@@ -2,6 +2,7 @@ import requests, json, logging, time, yaml, ipaddress, re
 from copy import deepcopy
 from config import netbox
 from util import synchronizers
+from util.django_api import DjangoAPI
 
 _DATASOURCE = netbox.NETBOX_SOURCE['name']
 
@@ -26,7 +27,7 @@ _VYOS_PARENT  = "^(eth|bond)([0-9]{1,3})(?:(\.)([0-9]{1,4})){0,1}$"
 
 logger = logging.getLogger(__name__)
 
-class NetboxAPI:
+class NetboxAPI(DjangoAPI):
     _API_BASE = netbox.NETBOX_URL + '/api'
 
     _PUBLIC_API_BASE = netbox.NETBOX_PUBLIC_URL
@@ -34,119 +35,6 @@ class NetboxAPI:
     _HEADERS = netbox.NETBOX_HEADERS
 
     _GRAPHQL_BASE = netbox.NETBOX_URL + '/graphql/'
-
-    ENDPOINTS = {}
-    
-    def __init__(self, endpoint=None):
-        self.set(endpoint)
-
-
-    def set(self, endpoint):
-        self.url = self._API_BASE
-        self.public_url = self._PUBLIC_API_BASE
-
-        if endpoint:
-            if endpoint in self.ENDPOINTS.keys():
-                endpoint = self.ENDPOINTS[endpoint]
-
-            if not endpoint.startswith('/'):
-                self.url += '/'
-                self.public_url += '/'
-            if not endpoint.endswith('/'):
-                endpoint += '/'
-
-            self.url += endpoint
-            self.public_url += endpoint
-
-        return self
-
-
-    def set_url(self, url):
-        self.url = url
-        return self
-
-
-    def set_id(self, id):
-        self.url += str(id) + '/'
-        self.public_url += str(id) + '/'
-        return self
-
-
-    def set_suffix(self, suffix):
-        self.url += str(suffix) + '/'
-        self.public_url += str(suffix) + '/'
-        return self
-
-
-    def set_params(self, **kwargs):
-        suffix = '?'
-
-        tags = kwargs.pop('tags', None)
-
-        for k, v in kwargs.items():
-            if v:
-                suffix += '%s=%s&' % (k, v)
-
-        if tags:
-            if isinstance(tags, list):
-                for tag in tags:
-                    suffix += 'tag=%s&' % tag
-            else:
-                suffix += 'tag=%s' % tags
-
-        # clean up url suffix
-        if suffix.endswith('?') or suffix.endswith('&'):
-            suffix = suffix[:-1]
-
-        self.url += suffix
-        self.public_url += suffix
-
-        return self
-
-
-    def get_url(self):
-        return self.url
-
-
-    def get_public_url(self):
-        return self.public_url
-
-
-    def get(self):
-        url = self.url
-        logger.debug(f'Netbox.get: {url}')
-        resp = requests.get(url, headers = self._HEADERS)
-        
-        if (code := resp.status_code) not in [200, 404]:
-            raise NetboxException(url, resp.json(), code)
-
-        if 'results' in ( json := resp.json() ):
-            return json['results']
-        return json
-
-
-    def post(self, data):
-        url = self.url
-        logger.debug(f'NetboxAPI.post: {url}')
-
-        if data:
-            resp = requests.post(url, headers = self._HEADERS, json = data )
-        else:
-            resp = requests.post(url, headers = self._HEADERS)
-
-        code = resp.status_code
-
-        result = False
-        if code in range(200, 300):
-            result = True
-
-        if isinstance(resp, dict):
-            out = resp.json()
-        else:
-            out = None
-
-        return result, out
-
 
     def call_script(self, data):
         url = self.url
@@ -194,8 +82,6 @@ def script_runner(script, data={}, commit=False):
     """
     nb = NetboxAPI('extras/scripts').set_suffix(script)
 
-    print(nb.get_url())
-
     result = nb.call_script({ 'data': data, 'commit': commit })
 
     # Location of the script's job
@@ -210,6 +96,9 @@ def script_runner(script, data={}, commit=False):
     out = None
     while time_bank > 0:
         time.sleep(step)
+
+        # DjangoAPI objects cache get responces. Clear this cache before polling.
+        nb.clear_cache()
         ret = nb.get()
         status = ret['status'].get('value')
 
