@@ -706,4 +706,4 @@ class PeeringManagerUtility():
         self.pm_api.patch(data)
 
         # Synchronize netdb and return
-        return self.synchronize_session(device, ip, test=False)
+        return self.synchronize_session(device, ip)
