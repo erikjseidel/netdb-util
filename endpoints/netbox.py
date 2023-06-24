@@ -1,7 +1,6 @@
 import logging, ipaddress
 from util.decorators import restful_method
-from modules import netbox
-from modules.netbox import NetboxException
+from modules.netbox import NetboxUtility, NetboxException
 
 # Public symbols
 __all__ = [
@@ -28,7 +27,7 @@ def synchronize_devices(method, data, params):
         test = False
 
     try:
-        return netbox.synchronize_devices(test)
+        return NetboxUtility(test).synchronize_devices()
     except NetboxException as e:
         return False, e.data, e.message
 
@@ -36,7 +35,7 @@ def synchronize_devices(method, data, params):
 @restful_method
 def generate_devices(method, data, params):
     try:
-        data = netbox.generate_devices()
+        data = NetboxUtility().generate_devices()
 
     except NetboxException as e:
         logger.error(f'exception at netbox.generate_devices: {e.message}', exc_info=e)
@@ -52,7 +51,7 @@ def synchronize_interfaces(method, data, params):
         test = False
 
     try:
-        return netbox.synchronize_interfaces(test=test)
+        return NetboxUtility(test).synchronize_interfaces()
     except NetboxException as e:
         return False, e.data, e.message
 
@@ -60,7 +59,7 @@ def synchronize_interfaces(method, data, params):
 @restful_method
 def generate_interfaces(method, data, params):
     try:
-        data = netbox.generate_interfaces()
+        data = NetboxUtility().generate_interfaces()
     except NetboxException as e:
         return False, { 'api_url': e.url, 'code': e.code }, e.message
 
@@ -74,7 +73,7 @@ def synchronize_igp(method, data, params):
         test = False
 
     try:
-        return netbox.synchronize_igp(test)
+        return NetboxUtility(test).synchronize_igp()
     except NetboxException as e:
         return False, e.data, e.message
 
@@ -82,10 +81,10 @@ def synchronize_igp(method, data, params):
 @restful_method
 def generate_igp(method, data, params):
     try:
-        data = netbox.generate_igp()
+        data = NetboxUtility().generate_igp()
 
     except NetboxException as e:
-        logger.error(f'exception at netbox.generate_igp: {e.message}', exc_info=e)
+        logger.error(f'exception at generate_igp: {e.message}', exc_info=e)
         return False, e.data, e.message
 
     return True, data, 'IGP configuration generated from Netbox datasource'
@@ -98,18 +97,19 @@ def synchronize_ebgp(method, data, params):
         test = False
 
     try:
-        return netbox.synchronize_ebgp(test)
+        return NetboxUtility(test).synchronize_ebgp()
     except NetboxException as e:
+        logger.error(f'exception at synchronize_ebgp: {e.message}', exc_info=e)
         return False, e.data, e.message
 
 
 @restful_method
 def generate_ebgp(method, data, params):
     try:
-        data = netbox.generate_ebgp()
+        data = NetboxUtility().generate_ebgp()
 
     except NetboxException as e:
-        logger.error(f'exception at netbox.generate_ebgp: {e.message}', exc_info=e)
+        logger.error(f'exception at generate_ebgp: {e.message}', exc_info=e)
         return False, e.data, e.message
 
     return True, data, 'Internal eBGP configuration generated from Netbox datasource'
@@ -117,27 +117,27 @@ def generate_ebgp(method, data, params):
 
 @restful_method
 def update_ptrs(method, data, params):
-    commit = False
+    test=True
     if params.get('test') in ['false', 'False']:
-        commit = True
+        test=False
 
-    return netbox.script_runner('update_ptrs.UpdatePTRs', commit=commit)
+    return NetboxUtility(test).script_runner('update_ptrs.UpdatePTRs')
 
 
 @restful_method
 def update_iface_descriptions(method, data, params):
-    commit = False
+    test=True
     if params.get('test') in ['false', 'False']:
-        commit = True
+        test=False
 
-    return netbox.script_runner('update_iface_descriptions.UpdateIfaceDescriptions', commit=commit)
+    return NetboxUtility(test).script_runner('update_iface_descriptions.UpdateIfaceDescriptions')
 
 
 @restful_method
 def renumber(method, data, params):
-    commit = False
+    test=True
     if params.get('test') in ['false', 'False']:
-        commit = True
+        test=False
 
     # Validate input parameters
     if not ( ipv4 := params.get('ipv4') ):
@@ -156,13 +156,13 @@ def renumber(method, data, params):
 
     data = { 'ipv4_prefix': ipv4, 'ipv6_prefix': ipv6 }
 
-    return netbox.script_runner('renumber.GenerateNew', data, commit=commit)
+    return NetboxUtility(test).script_runner('renumber.GenerateNew', data)
 
 
 @restful_method
 def prune_ips(method, data, params):
-    commit = False
+    test=True
     if params.get('test') in ['false', 'False']:
-        commit = True
+        test=False
 
-    return netbox.script_runner('renumber.PruneIPs', commit=commit)
+    return NetboxUtility(test).script_runner('renumber.PruneIPs')
