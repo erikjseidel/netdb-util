@@ -351,8 +351,6 @@ def generate_direct_session_base(session, groups, asns, policies):
     else:
         family = 4
 
-    url = f"{PeeringManager('direct-sessions').get_public_url()}{session_id}/"
-
     source_ip = session.get('local_ip_address')
 
     entry = {
@@ -408,6 +406,8 @@ def generate_direct_session_base(session, groups, asns, policies):
         if max_prefixes:
             addr_fam['max_prefixes'] = max_prefixes
 
+    url = PeeringManager('direct-sessions').set_id(session_id).get_public_url()
+
     meta = {
             'session_id'   : session_id,
             'url'          : url,
@@ -460,8 +460,6 @@ def generate_ixp_session_base(session, connections, ixps, asns, policies):
     else:
         family = 4
 
-    url = f"{PeeringManager('ixp-sessions').get_public_url()}{session_id}/"
-
     entry = {
             'remote_asn' : session['autonomous_system'].get('asn'),
             'password'   : session.get('password'),
@@ -511,6 +509,8 @@ def generate_ixp_session_base(session, connections, ixps, asns, policies):
 
         if max_prefixes:
             addr_fam['max_prefixes'] = max_prefixes
+
+    url = PeeringManager('ixp-sessions').set_id(session_id).get_public_url()
 
     meta = {
             'session_id'    : session_id,
