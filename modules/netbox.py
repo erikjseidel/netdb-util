@@ -28,6 +28,9 @@ _VYOS_PARENT  = "^(eth|bond)([0-9]{1,3})(?:(\.)([0-9]{1,4})){0,1}$"
 logger = logging.getLogger(__name__)
 
 class NetboxAPI(DjangoAPI):
+    """
+    Simple class for interacting with Netbox API and GQL endpoint.
+    """
     _API_BASE = netbox.NETBOX_URL + '/api'
 
     _PUBLIC_API_BASE = netbox.NETBOX_PUBLIC_URL
