@@ -5,8 +5,6 @@ from config import pm
 from schema import pm as pm_schema
 from util import synchronizers
 
-from pprint import pprint
-
 _DATASOURCE = pm.PM_SOURCE['name']
 
 _DEFAULT_REJECT = 'REJECT-ALL'
@@ -117,7 +115,6 @@ class PeeringManagerAPI:
         # the cached version, otherwise query the PM API.
         resp = self._GET_CACHE.get(url)
         if not resp:
-            print(url)
             resp = requests.get(url, headers = self._HEADERS)
             self._GET_CACHE[url] = resp
         
