@@ -42,46 +42,6 @@ class PMException(DjangoException):
 
 class PeeringManagerUtility:
 
-    # Names and translations for relationships for PM direct sessions
-    DIRECT_SESSION_VARS = {
-            'local_asn' : 'local_autonomous_system',
-            'peer_asn'  : 'autonomous_system',
-            'type'      : 'relationship',
-            'import'    : 'import_routing_policies',
-            'export'    : 'export_routing_policies',
-            'device'    : 'router',
-            }
-
-    # Incoming keys accepted by create_direct_session
-    ADD_DIRECT_SESSION_MASK = [
-            'local_asn',
-            'peer_asn',
-            'type',
-            'import',
-            'export',
-            'device',
-            'local_ip',
-            'remote_ip',
-            'status',
-            'password',
-            'ttl',
-            'comment',
-            ]
-
-    # Incoming keys accepted by update_direct_session
-    UPDATE_DIRECT_SESSION_MASK = [
-            'device',
-            'remote_ip',
-            'type',
-            'import',
-            'export',
-            'local_ip',
-            'status',
-            'password',
-            'ttl',
-            'comment',
-            ]
-
     def __init__(self, test=False):
 
         # Maps relationship vars to search methods. Used to
@@ -103,7 +63,7 @@ class PeeringManagerUtility:
         out = {}
 
         # Populate the child relationships
-        for k, v in self.DIRECT_SESSION_VARS.items():
+        for k, v in pm_schema.DIRECT_SESSION_VARS.items():
             child = data.pop(k, None)
 
             # Zero means empty
@@ -276,7 +236,7 @@ class PeeringManagerUtility:
 
         # Check that all incoming keys are valid options.
         for k in data.keys():
-            if k not in self.ADD_DIRECT_SESSION_MASK:
+            if k not in pm_schema.ADD_DIRECT_SESSION_MASK:
                 return False, None, f'{k}: invalid key'
 
         # PM will allow addition of multiple sessions with the same device
@@ -313,7 +273,7 @@ class PeeringManagerUtility:
 
         # Check that all incoming keys are valid options.
         for k in data.keys():
-            if k not in self.UPDATE_DIRECT_SESSION_MASK:
+            if k not in pm_schema.UPDATE_DIRECT_SESSION_MASK:
                 return False, None, f'{k}: invalid key'
 
         device = data.pop('device', None)

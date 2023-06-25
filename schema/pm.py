@@ -14,6 +14,46 @@ POLICY_FAMILIES = {
 
 PM_STATUS = ['enabled', 'disabled', 'maintenance']
 
+# Names and translations for relationships for PM direct sessions
+DIRECT_SESSION_VARS = {
+        'local_asn' : 'local_autonomous_system',
+        'peer_asn'  : 'autonomous_system',
+        'type'      : 'relationship',
+        'import'    : 'import_routing_policies',
+        'export'    : 'export_routing_policies',
+        'device'    : 'router',
+        }
+
+# Incoming keys accepted by create_direct_session
+ADD_DIRECT_SESSION_MASK = [
+        'local_asn',
+        'peer_asn',
+        'type',
+        'import',
+        'export',
+        'device',
+        'local_ip',
+        'remote_ip',
+        'status',
+        'password',
+        'ttl',
+        'comment',
+        ]
+
+# Incoming keys accepted by update_direct_session
+UPDATE_DIRECT_SESSION_MASK = [
+        'device',
+        'remote_ip',
+        'type',
+        'import',
+        'export',
+        'local_ip',
+        'status',
+        'password',
+        'ttl',
+        'comment',
+        ]
+
 DEFAULT_REJECT = 'REJECT-ALL'
 
 class PolicySchema(Schema):
