@@ -51,6 +51,24 @@ class PMException(Exception):
 class PeeringManagerUtility:
 
     def __init__(self, test=False):
+        self.DIRECT_SESSION_VARS = {
+                'local_asn' : 'local_autonomous_system',
+                'peer_asn'  : 'autonomous_system',
+                'type'      : 'relationship',
+                'import'    : 'import_routing_policies',
+                'export'    : 'export_routing_policies',
+                'device'    : 'router',
+                }
+
+        self.SEARCH_METHODS = {
+                'local_asn' : self.search_asns,
+                'peer_asn'  : self.search_asns,
+                'type'      : self.search_relationships,
+                'import'    : self.search_policies,
+                'export'    : self.search_policies,
+                'device'    : self.search_routers,
+                }
+
         self.test = test
         self.pm_api = PeeringManagerAPI()
 
@@ -230,24 +248,6 @@ class PeeringManagerUtility:
 
     def create_direct_session(self, data):
 
-        CHILD_VARS = {
-                'local_asn' : 'local_autonomous_system',
-                'peer_asn'  : 'autonomous_system',
-                'type'      : 'relationship',
-                'import'    : 'import_routing_policies',
-                'export'    : 'export_routing_policies',
-                'device'    : 'router',
-                }
-
-        CHILD_METHODS = {
-                'local_asn' : self.search_asns,
-                'peer_asn'  : self.search_asns,
-                'type'      : self.search_relationships,
-                'import'    : self.search_policies,
-                'export'    : self.search_policies,
-                'device'    : self.search_routers,
-                }
-
         # PM will allow addition of multiple sessions with the same device
         # and remote IP. Prevent this from happening via netb-util calls.
         device = data.get('device')
@@ -262,9 +262,9 @@ class PeeringManagerUtility:
         data_in = {}
 
         # Populate the child relationships
-        for k, v in CHILD_VARS.items():
+        for k, v in self.DIRECT_SESSION_VARS.items():
             if child := data.pop(k, None):
-                if id := CHILD_METHODS[k](child):
+                if id := self.SEARCH_METHODS[k](child):
                     data_in[v] = id
                 else:
                     return False, None, f'{k} {child} not found in PM'
@@ -278,12 +278,31 @@ class PeeringManagerUtility:
             return False, error.messages, 'invalid session data'
 
         result, ret = self.pm_api.set('direct-sessions').post(session)
+        if not result:
+            return result, ret, 'PM API returned an error'
 
-        msg = 'PM API returned an error'
-        if result:
-            msg = 'Direct session created'
+        result, out, comment = self.synchronize_session(device, remote_ip)
+        if not result:
+            return True, out, f'Addition to PM complete. {comment}'
 
-        return result, ret, msg
+        return result, out, 'Direct session created in Peering Manager'
+
+
+    def delete_direct_session(self, device, ip):
+
+        id = self.search_direct_sessions(device, ip)
+        if not id:
+            return False, None, 'Direct session not found in Peering Manager'
+
+        result = self.pm_api.set('direct-sessions').set_id(id).delete()
+        if not result:
+            return result, None, 'Deletion failed'
+
+        result, out, comment = self.synchronize_session(device, ip)
+        if not result:
+            return True, out, f'Deletion from PM complete. {comment}'
+
+        return result, out, 'Direct session deleted in Peering Manager'
 
 
     def generate_direct_session_base(self, session):

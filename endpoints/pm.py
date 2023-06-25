@@ -15,6 +15,7 @@ __all__ = [
         'create_asn',
         'peeringdb_asn_sync',
         'create_direct_session',
+        'delete_direct_session',
         ]
 
 logger = logging.getLogger(__name__)
@@ -174,4 +175,20 @@ def create_direct_session(method, data, params):
 
     except PMException as e:
         logger.error(f'exception at pm.create_direct_session: {e.message}', exc_info=e)
+        return False, e.data, e.message
+
+
+@restful_method(methods=['DELETE'])
+def delete_direct_session(method, data, params):
+    device = params.get('device')
+    ip = params.get('ip')
+
+    if not (device and ip):
+        return False, None, 'device and ip parameters required'
+
+    try:
+        return PeeringManagerUtility().delete_direct_session(device, ip)
+
+    except PMException as e:
+        logger.error(f'exception at pm.delete_direct_session: {e.message}', exc_info=e)
         return False, e.data, e.message

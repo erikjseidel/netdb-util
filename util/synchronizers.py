@@ -6,6 +6,14 @@ _NETDB_IFACE_COLUMN = 'interface'
 _NETDB_IGP_COLUMN   = 'igp'
 _NETDB_BGP_COLUMN   = 'bgp'
 
+_MSG_NO_CHANGES = 'Netdb already synchronized.'
+_MSG_DRY_RUN    = 'Dry run. No changes made.'
+_MSG_COMPLETE   = 'Synchronization complete.'
+
+_MSG_UPDATE = 'update to netdb %s'
+_MSG_ADD    = 'addition to netdb %s'
+_MSG_DELETE = 'removal from netdb %s'
+
 logger = logging.getLogger(__name__)
 
 def bgp_sessions(datasource, sot_sessions, test=True):
@@ -38,7 +46,7 @@ def bgp_sessions(datasource, sot_sessions, test=True):
                     if not test:
                         netdb.replace(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
                     changes[neighbor] = {
-                            '_comment': f'update {adjective}',
+                            '_comment': _MSG_UPDATE % adjective,
                             **data
                             }
                 netdb_ebgp[device]['neighbors'].pop(neighbor)
@@ -47,7 +55,7 @@ def bgp_sessions(datasource, sot_sessions, test=True):
                 if not test:
                     netdb.add(_NETDB_BGP_COLUMN, data = { device: { 'neighbors' : { neighbor: data }}})
                 changes[neighbor] = {
-                        '_comment': f'addition {adjective}',
+                        '_comment': _MSG_ADD % adjective,
                         **data
                         }
 
@@ -59,7 +67,7 @@ def bgp_sessions(datasource, sot_sessions, test=True):
                     filt = { "set_id": [device, 'neighbors', neighbor], **_FILTER }
                     netdb.delete(_NETDB_BGP_COLUMN, data = filt)
                 changes[neighbor] = {
-                       '_comment': f'removal from netdb {adjective}',
+                       '_comment': _MSG_DELETE % adjective,
                        }
 
         if changes:
@@ -67,11 +75,11 @@ def bgp_sessions(datasource, sot_sessions, test=True):
             all_changes[device]['neighbors'] = changes
 
     if not all_changes:
-        message = 'Netdb eBGP sessions already synchronized. No changes made.'
+        message = _MSG_NO_CHANGES
     elif test:
-        message = 'Dry run. No changes made.'
+        message = _MSG_DRY_RUN
     else:
-        message = 'Synchronization complete.'
+        message = _MSG_COMPLETE
 
     if not test:
         logger.info(f'synchronizers.bgp_sessions: {message}')
@@ -102,8 +110,8 @@ def bgp_session(datasource, sot_session, device, ip, test=True):
                 if not test:
                     netdb.replace(_NETDB_BGP_COLUMN, data = sot_session)
                 change = {
-                        '_comment': f'update {adjective}',
-                        **sot_session[device]['neighbors']
+                        '_comment': _MSG_UPDATE % adjective,
+                        **sot_session
                         }
 
         else:
@@ -111,8 +119,8 @@ def bgp_session(datasource, sot_session, device, ip, test=True):
             if not test:
                 netdb.add(_NETDB_BGP_COLUMN, data = sot_session)
             change = {
-                    '_comment': f'addition {adjective}',
-                    **sot_session[device]['neighbors']
+                    '_comment': _MSG_ADD % adjective,
+                    **sot_session
                     }
 
     elif data:
@@ -121,15 +129,15 @@ def bgp_session(datasource, sot_session, device, ip, test=True):
             filt = { "set_id": [device, 'neighbors', ip], **_FILTER }
             netdb.delete(_NETDB_BGP_COLUMN, data = filt)
         change = {
-               '_comment': f'removal from netdb {adjective}',
+               '_comment': _MSG_DELETE % adjective,
                }
 
     if not change:
-        message = 'Netdb eBGP session already synchronized. No changes made.'
+        message = _MSG_NO_CHANGES
     elif test:
-        message = 'Dry run. No changes made.'
+        message = _MSG_DRY_RUN
     else:
-        message = 'Synchronization complete.'
+        message = _MSG_COMPLETE
 
     if not test:
         logger.info(f'synchronizers.bgp_session: {message}')
@@ -156,7 +164,7 @@ def igp(datasource, sot_igp, test = True):
         if device in netdb_igp.keys():
             if data != netdb_igp[device]:
                 # Update required.
-                changes[device] = f'update {adjective}'
+                changes[device] = _MSG_UPDATE % adjective
                 if not test:
                     netdb.replace(_NETDB_IGP_COLUMN, data = { device : data })
             netdb_igp.pop(device)
@@ -164,7 +172,7 @@ def igp(datasource, sot_igp, test = True):
             # Addition required
             if not test:
                 netdb.add(_NETDB_IGP_COLUMN, data = { device : data })
-            changes[device] = f'addition {adjective}'
+            changes[device] = _MSG_ADD % adjective
 
     # Any remaining (unpopped) devices in netdb need to be deleted
     for device in netdb_igp.keys():
@@ -172,14 +180,14 @@ def igp(datasource, sot_igp, test = True):
         if not test:
             filt = { "set_id": [device, 'isis'], **_FILTER }
             netdb.delete(_NETDB_IGP_COLUMN, data = filt)
-        changes[device] = f'removal from netdb {adjective}'
+        changes[device] = _MSG_DELETE % adjective
 
     if not changes:
-        message = 'Netdb isis config already synchronized. No changes made.'
+        message = _MSG_NO_CHANGES
     elif test:
-        message = 'Dry run. No changes made.'
+        message = _MSG_DRY_RUN
     else:
-        message = 'Synchronization complete.'
+        message = _MSG_COMPLETE
 
     if not test:
         logger.info(f'synchronizers.igp: {message}')
@@ -208,7 +216,7 @@ def interfaces(datasource, sot_interfaces, test=True):
             if iface in netdb_ifaces[device].keys():
                 if data != netdb_ifaces[device][iface]:
                     # Update required.
-                    changes[iface] = f'update {adjective}'
+                    changes[iface] = _MSG_UPDATE % adjective
                     if not test:
                         netdb.replace(_NETDB_IFACE_COLUMN, data = { device: { iface : data }})
                 netdb_ifaces[device].pop(iface)
@@ -216,7 +224,7 @@ def interfaces(datasource, sot_interfaces, test=True):
                 # Addition required
                 if not test:
                     netdb.add(_NETDB_IFACE_COLUMN, data = { device: { iface : data }})
-                changes[iface] = f'addition {adjective}'
+                changes[iface] = _MSG_ADD % adjective
 
         # Any remaining (unpopped) interfaces in netdb need to be deleted
         for iface in netdb_ifaces[device].keys():
@@ -224,17 +232,17 @@ def interfaces(datasource, sot_interfaces, test=True):
             if not test:
                 filt = { "set_id": [device, iface], **_FILTER }
                 netdb.delete(_NETDB_IFACE_COLUMN, data = filt)
-            changes[iface] = f'removal from netdb {adjective}'
+            changes[iface] = _MSG_DELETE % adjective
 
         if changes:
             all_changes[device] = changes
 
     if not all_changes:
-        message = 'Netdb interfaces already synchronized. No changes made.'
+        message = _MSG_NO_CHANGES
     elif test:
-        message = 'Dry run. No changes made.'
+        message = _MSG_DRY_RUN
     else:
-        message = 'Synchronization complete.'
+        message = _MSG_COMPLETE
 
     if not test:
         logger.info(f'synchronizers.interfaces: {message}')
@@ -261,7 +269,7 @@ def devices(datasource, sot_dev, test = True):
         if device in netdb_dev.keys():
             if data != netdb_dev[device]:
                 # Update required.
-                changes[device] = f'update {adjective}'
+                changes[device] = _MSG_UPDATE % adjective
                 if not test:
                     netdb.replace(_NETDB_DEV_COLUMN, data = { device : data })
             netdb_dev.pop(device)
@@ -269,7 +277,7 @@ def devices(datasource, sot_dev, test = True):
             # Addition required
             if not test:
                 netdb.add(_NETDB_DEV_COLUMN, data = { device : data })
-            changes[device] = f'addition {adjective}'
+            changes[device] = _MSG_ADD % adjective
 
     # Any remaining (unpopped) devices in netdb need to be deleted
     for device in netdb_dev.keys():
@@ -277,14 +285,14 @@ def devices(datasource, sot_dev, test = True):
         if not test:
             filt = { "id": device, **_FILTER }
             netdb.delete(_NETDB_IFACE_COLUMN, data = filt)
-        changes[device] = f'removal from netdb {adjective}'
+        changes[device] = _MSG_DELETE % adjective
 
     if not changes:
-        message = 'Netdb devices already synchronized. No changes made.'
+        message = _MSG_NO_CHANGES
     elif test:
-        message = 'Dry run. No changes made.'
+        message = _MSG_DRY_RUN
     else:
-        message = 'Synchronization complete.'
+        message = _MSG_COMPLETE
 
     if not test:
         logger.info(f'_synchronize_devices: {message}')
