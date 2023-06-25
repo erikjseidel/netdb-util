@@ -24,35 +24,27 @@ DIRECT_SESSION_VARS = {
         'device'    : 'router',
         }
 
-# Incoming keys accepted by create_direct_session
-ADD_DIRECT_SESSION_MASK = [
-        'local_asn',
-        'peer_asn',
-        'type',
+DIRECT_SESSION_MASK = [
+        'device',
+        'remote_ip',
         'import',
         'export',
-        'device',
         'local_ip',
-        'remote_ip',
         'status',
         'password',
         'ttl',
         'comment',
         ]
 
-# Incoming keys accepted by update_direct_session
-UPDATE_DIRECT_SESSION_MASK = [
-        'device',
-        'remote_ip',
+# Incoming keys accepted by create_direct_session
+ADD_DIRECT_SESSION_MASK = DIRECT_SESSION_MASK + [
+        'local_asn',
+        'peer_asn',
         'type',
-        'import',
-        'export',
-        'local_ip',
-        'status',
-        'password',
-        'ttl',
-        'comment',
         ]
+
+# Incoming keys accepted by update_direct_session
+UPDATE_DIRECT_SESSION_MASK = DIRECT_SESSION_MASK
 
 DEFAULT_REJECT = 'REJECT-ALL'
 
