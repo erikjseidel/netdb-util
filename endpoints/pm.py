@@ -15,6 +15,7 @@ __all__ = [
         'create_asn',
         'peeringdb_asn_sync',
         'create_direct_session',
+        'update_direct_session',
         'delete_direct_session',
         ]
 
@@ -125,6 +126,12 @@ def peeringdb_asn_sync(method, data, params):
 def create_direct_session(method, data, params):
 
     return PeeringManagerUtility().create_direct_session(data)
+
+
+@restful_method(methods=['PUT'])
+def update_direct_session(method, data, params):
+
+    return PeeringManagerUtility().update_direct_session(data)
 
 
 @restful_method(methods=['DELETE'])

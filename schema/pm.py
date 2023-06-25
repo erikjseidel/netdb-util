@@ -63,7 +63,7 @@ class AsnSchema(Schema):
 
 class DirectSessionSchema(Schema):
     local_ip  = fields.IP()
-    remote_ip = fields.IP(required=True)
+    remote_ip = fields.IP()
     password  = fields.String()
     ttl       = fields.Integer(validate = validate.Range(1, 256))
     comment   = fields.String()
@@ -102,11 +102,19 @@ class DirectSessionSchema(Schema):
 
         # PM API expects arrays for policy relationships
         for k in ['import_routing_policies', 'export_routing_policies']:
-            if v := data.pop(k, None):
+            v = data.pop(k, None)
+            # Zero means empty
+            if v == 0:
+                out[k] = []
+            elif v:
                 out[k] = [v]
 
         # Remaining relationships should be objects
         for k, v in data.items():
-            out[k] = { 'id': v }
+            # Zero means empty
+            if v == 0:
+                out[k] = {}
+            else:
+                out[k] = { 'id': v }
 
         return out

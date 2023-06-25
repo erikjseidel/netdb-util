@@ -70,6 +70,8 @@ class PeeringManagerUtility:
 
     # Incoming keys accepted by update_direct_session
     UPDATE_DIRECT_SESSION_MASK = [
+            'device',
+            'remote_ip',
             'type',
             'import',
             'export',
@@ -102,7 +104,13 @@ class PeeringManagerUtility:
 
         # Populate the child relationships
         for k, v in self.DIRECT_SESSION_VARS.items():
-            if child := data.pop(k, None):
+            child = data.pop(k, None)
+
+            # Zero means empty
+            if child == 0:
+                out[v] = 0
+
+            elif child:
                 if id := self.SEARCH_METHODS[k](child):
                     out[v] = id
                 else:
@@ -308,9 +316,9 @@ class PeeringManagerUtility:
             if k not in self.UPDATE_DIRECT_SESSION_MASK:
                 return False, None, f'{k}: invalid key'
 
-        device = data.get('device')
-        remote_ip = data.get('remote_ip')
-        if not self.search_direct_sessions(device, remote_ip):
+        device = data.pop('device', None)
+        remote_ip = data.pop('remote_ip', None)
+        if not ( id := self.search_direct_sessions(device, remote_ip) ):
             return False, None, f'{remote_ip} at {device}: session not found'
 
         data_in = self._resolve_relationships(data)
@@ -323,13 +331,13 @@ class PeeringManagerUtility:
         except ValidationError as error:
             return False, error.messages, 'invalid session data'
 
-        ret = self.pm_api.set('direct-sessions').patch(session)
+        ret = self.pm_api.set('direct-sessions').set_id(id).patch(session)
 
         result, out, comment = self.synchronize_session(device, remote_ip)
         if not result:
-            return True, out, f'Addition to PM complete. {comment}'
+            return True, out, f'PM update complete. {comment}'
 
-        return result, out, 'Direct session created in Peering Manager'
+        return result, out, 'Direct session updated in Peering Manager'
 
 
     def delete_direct_session(self, device, ip):

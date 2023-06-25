@@ -68,7 +68,7 @@ def restful_method(methods=['GET']):
                     if out: ret.update({ 'out': out })
 
                 except DjangoException as e:
-                    logger.error(f'exception: {e.message}', exc_info=e)
+                    logger.error(f'Exception occured: {e.message}', exc_info=e)
                     ret = { 'result': False, 'error': True, 'comment': e.message }
 
                 except (PMException, NetboxException) as e:
