@@ -2,6 +2,21 @@ import requests, json, logging, yaml, ipaddress
 
 logger = logging.getLogger(__name__)
 
+class DjangoException(Exception):
+    """Exception raised for failed / unexpected Django API calls / results
+
+    Attributes:
+        url     -- CF API url
+        message -- explanation of the error
+    """
+    def __init__(self, url=None, data=None, code=None, message=None):
+        self.url     = url
+        self.data    = data
+        self.code    = code
+        self.message = message
+        super().__init__(self.message)
+
+
 class DjangoAPI:
     """
     Simple class for interacting with Django APIs.
@@ -118,17 +133,16 @@ class DjangoAPI:
 
         code = resp.status_code
 
-        result = False
-        if code in range(200, 300):
-            result = True
-
         try:
             out = resp.json()
         except ValueError:
             out = None
 
+        if code not in range(200, 300):
+            raise DjangoException(data=out, code=code, message=self._ERR_MSG)
+
         self.clear_cache()
-        return result, out
+        return out
 
 
     def patch(self, data):
@@ -137,12 +151,11 @@ class DjangoAPI:
         resp = requests.patch(url, headers = self._HEADERS, json = data )
         code = resp.status_code
 
-        result = False
-        if code in range(200, 300):
-            result = True
+        if code not in range(200, 300):
+            raise DjangoException(data=resp.json(), code=code, message=self._ERR_MSG)
 
         self.clear_cache()
-        return result, resp.json()
+        return resp.json()
 
 
     def delete(self):
@@ -151,9 +164,8 @@ class DjangoAPI:
         resp = requests.delete(url, headers = self._HEADERS)
         code = resp.status_code
 
-        result = False
-        if code in range(200, 300):
-            result = True
+        if code not in range(200, 300):
+            raise DjangoException(data=resp.json(), code=code, message=self._ERR_MSG)
 
         self.clear_cache()
-        return result
+        return

@@ -4,7 +4,7 @@ from copy import deepcopy
 from config import pm
 from schema import pm as pm_schema
 from util import synchronizers
-from util.django_api import DjangoAPI
+from util.django_api import DjangoAPI, DjangoException
 
 _DATASOURCE = pm.PM_SOURCE['name']
 
@@ -20,6 +20,9 @@ class PeeringManagerAPI(DjangoAPI):
 
     _HEADERS = pm.PM_HEADERS
 
+    # Used for exception error messages
+    _ERR_MSG = 'PM API returned an error'
+
     ENDPOINTS = {
         'direct-sessions' : 'peering/direct-peering-sessions',
         'ixp-sessions'    : 'peering/internet-exchange-peering-sessions',
@@ -33,33 +36,54 @@ class PeeringManagerAPI(DjangoAPI):
         }
 
 
-class PMException(Exception):
-    """Exception raised for failed / unexpected netbox API calls / results
-
-    Attributes:
-        url     -- CF API url
-        message -- explanation of the error
-    """
-    def __init__(self, url=None, data=None, code=None, message=None):
-        self.url     = url
-        self.data    = data
-        self.code    = code
-        self.message = message
-        super().__init__(self.message)
+class PMException(DjangoException):
+    pass
 
 
 class PeeringManagerUtility:
 
-    def __init__(self, test=False):
-        self.DIRECT_SESSION_VARS = {
-                'local_asn' : 'local_autonomous_system',
-                'peer_asn'  : 'autonomous_system',
-                'type'      : 'relationship',
-                'import'    : 'import_routing_policies',
-                'export'    : 'export_routing_policies',
-                'device'    : 'router',
-                }
+    # Names and translations for relationships for PM direct sessions
+    DIRECT_SESSION_VARS = {
+            'local_asn' : 'local_autonomous_system',
+            'peer_asn'  : 'autonomous_system',
+            'type'      : 'relationship',
+            'import'    : 'import_routing_policies',
+            'export'    : 'export_routing_policies',
+            'device'    : 'router',
+            }
 
+    # Incoming keys accepted by create_direct_session
+    ADD_DIRECT_SESSION_MASK = [
+            'local_asn',
+            'peer_asn',
+            'type',
+            'import',
+            'export',
+            'device',
+            'local_ip',
+            'remote_ip',
+            'status',
+            'password',
+            'ttl',
+            'comment',
+            ]
+
+    # Incoming keys accepted by update_direct_session
+    UPDATE_DIRECT_SESSION_MASK = [
+            'type',
+            'import',
+            'export',
+            'local_ip',
+            'status',
+            'password',
+            'ttl',
+            'comment',
+            ]
+
+    def __init__(self, test=False):
+
+        # Maps relationship vars to search methods. Used to
+        # resolve names to ids for each relationship
         self.SEARCH_METHODS = {
                 'local_asn' : self.search_asns,
                 'peer_asn'  : self.search_asns,
@@ -71,6 +95,20 @@ class PeeringManagerUtility:
 
         self.test = test
         self.pm_api = PeeringManagerAPI()
+
+
+    def _resolve_relationships(self, data):
+        out = {}
+
+        # Populate the child relationships
+        for k, v in self.DIRECT_SESSION_VARS.items():
+            if child := data.pop(k, None):
+                if id := self.SEARCH_METHODS[k](child):
+                    out[v] = id
+                else:
+                    raise PMException(message=f'{k} {child} not found in PM')
+
+        return out
 
 
     def search_direct_sessions(self, device, ip):
@@ -155,13 +193,9 @@ class PeeringManagerUtility:
         except ValidationError as error:
             return False, error.messages, 'invalid policy data'
 
-        result, ret = self.pm_api.set('policies').post(policy)
+        ret = self.pm_api.set('policies').post(policy)
 
-        msg = 'PM API returned an error'
-        if result:
-            msg = 'Policy created'
-
-        return result, ret, msg
+        return result, ret, 'Policy created'
 
 
     def delete_policy(self, name):
@@ -169,13 +203,9 @@ class PeeringManagerUtility:
         if not id:
             return False, None, 'Policy not found in Peering Manager'
 
-        result = self.pm_api.set('policies').set_id(id).delete()
+        self.pm_api.set('policies').set_id(id).delete()
 
-        msg = 'PM API returned an error'
-        if result:
-            msg = 'Policy deleted'
-
-        return result, None, msg
+        return result, None, 'Policy deleted'
 
 
     def generate_policies(self, pm_object, policies, family):
@@ -207,13 +237,9 @@ class PeeringManagerUtility:
         except ValidationError as error:
             return False, error.messages, 'invalid ASN data'
 
-        result, ret = self.pm_api.set('asns').post(asn)
+        ret = self.pm_api.set('asns').post(asn)
 
-        msg = 'PM API returned an error'
-        if result:
-            msg = 'ASN created'
-
-        return result, ret, msg
+        return result, ret, 'ASN created'
 
 
     def peeringdb_asn_sync(self, name):
@@ -222,13 +248,9 @@ class PeeringManagerUtility:
         if not id:
             return False, None, 'ASN not found in Peering Manager'
 
-        result, _ = self.pm_api.set('asns').set_id(id).set_suffix('sync-with-peeringdb').post()
+        self.pm_api.set('asns').set_id(id).set_suffix('sync-with-peeringdb').post()
 
-        msg = 'PM API returned an error'
-        if result:
-            msg = 'ASN synchronized from peeringdb'
-
-        return result, None, msg
+        return result, None, 'ASN synchronized from peeringdb'
         
 
     def delete_asn(self, name):
@@ -237,16 +259,17 @@ class PeeringManagerUtility:
         if not id:
             return False, None, 'ASN not found in Peering Manager'
 
-        result = self.pm_api.set('asns').set_id(id).delete()
+        self.pm_api.set('asns').set_id(id).delete()
 
-        msg = 'PM API returned an error'
-        if result:
-            msg = 'ASN deleted'
-
-        return result, None, msg
+        return result, None, 'ASN deleted'
 
 
     def create_direct_session(self, data):
+
+        # Check that all incoming keys are valid options.
+        for k in data.keys():
+            if k not in self.ADD_DIRECT_SESSION_MASK:
+                return False, None, f'{k}: invalid key'
 
         # PM will allow addition of multiple sessions with the same device
         # and remote IP. Prevent this from happening via netb-util calls.
@@ -259,15 +282,7 @@ class PeeringManagerUtility:
             if status not in pm_schema.PM_STATUS:
                 return False, None, 'Invalid session status'
 
-        data_in = {}
-
-        # Populate the child relationships
-        for k, v in self.DIRECT_SESSION_VARS.items():
-            if child := data.pop(k, None):
-                if id := self.SEARCH_METHODS[k](child):
-                    data_in[v] = id
-                else:
-                    return False, None, f'{k} {child} not found in PM'
+        data_in = self._resolve_relationships(data)
 
         # Update data_in with remaining input data
         data_in.update({ k: v for k, v in data.items() if v })
@@ -277,9 +292,38 @@ class PeeringManagerUtility:
         except ValidationError as error:
             return False, error.messages, 'invalid session data'
 
-        result, ret = self.pm_api.set('direct-sessions').post(session)
+        ret = self.pm_api.set('direct-sessions').post(session)
+
+        result, out, comment = self.synchronize_session(device, remote_ip)
         if not result:
-            return result, ret, 'PM API returned an error'
+            return True, out, f'Addition to PM complete. {comment}'
+
+        return result, out, 'Direct session created in Peering Manager'
+
+
+    def update_direct_session(self, data):
+
+        # Check that all incoming keys are valid options.
+        for k in data.keys():
+            if k not in self.UPDATE_DIRECT_SESSION_MASK:
+                return False, None, f'{k}: invalid key'
+
+        device = data.get('device')
+        remote_ip = data.get('remote_ip')
+        if not self.search_direct_sessions(device, remote_ip):
+            return False, None, f'{remote_ip} at {device}: session not found'
+
+        data_in = self._resolve_relationships(data)
+
+        # Update data_in with remaining input data
+        data_in.update({ k: v for k, v in data.items() if v })
+
+        try:
+            session = pm_schema.DirectSessionSchema().load(data_in)
+        except ValidationError as error:
+            return False, error.messages, 'invalid session data'
+
+        ret = self.pm_api.set('direct-sessions').patch(session)
 
         result, out, comment = self.synchronize_session(device, remote_ip)
         if not result:
@@ -290,13 +334,10 @@ class PeeringManagerUtility:
 
     def delete_direct_session(self, device, ip):
 
-        id = self.search_direct_sessions(device, ip)
-        if not id:
+        if not ( id := self.search_direct_sessions(device, ip) ):
             return False, None, 'Direct session not found in Peering Manager'
 
-        result = self.pm_api.set('direct-sessions').set_id(id).delete()
-        if not result:
-            return result, None, 'Deletion failed'
+        self.pm_api.set('direct-sessions').set_id(id).delete()
 
         result, out, comment = self.synchronize_session(device, ip)
         if not result:

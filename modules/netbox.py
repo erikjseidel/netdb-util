@@ -2,7 +2,7 @@ import requests, json, logging, time, yaml, ipaddress, re
 from copy import deepcopy
 from config import netbox
 from util import synchronizers
-from util.django_api import DjangoAPI
+from util.django_api import DjangoAPI, DjangoException
 
 _DATASOURCE = netbox.NETBOX_SOURCE['name']
 
@@ -39,6 +39,8 @@ class NetboxAPI(DjangoAPI):
 
     _GRAPHQL_BASE = netbox.NETBOX_URL + '/graphql/'
 
+    _ERR_MSG = 'Netbox API returned an error'
+
     def call_script(self, data):
         url = self.url
         logger.debug(f'NetboxAPI.call_script: {url}')
@@ -61,19 +63,8 @@ class NetboxAPI(DjangoAPI):
         return resp.json()
 
 
-class NetboxException(Exception):
-    """Exception raised for failed / unexpected netbox API calls / results
-
-    Attributes:
-        url     -- CF API url
-        message -- explanation of the error
-    """
-    def __init__(self, url=None, data=None, code=None, message=None):
-        self.url     = url
-        self.data    = data
-        self.code    = code
-        self.message = message
-        super().__init__(self.message)
+class NetboxException(DjangoException):
+    pass
 
 
 class NetboxUtility:

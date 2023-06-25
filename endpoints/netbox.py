@@ -1,6 +1,6 @@
 import logging, ipaddress
 from util.decorators import restful_method
-from modules.netbox import NetboxUtility, NetboxException
+from modules.netbox import NetboxUtility
 
 # Public symbols
 __all__ = [
@@ -26,20 +26,13 @@ def synchronize_devices(method, data, params):
     if params.get('test') in ['false', 'False']:
         test = False
 
-    try:
-        return NetboxUtility(test).synchronize_devices()
-    except NetboxException as e:
-        return False, e.data, e.message
+    return NetboxUtility(test).synchronize_devices()
 
 
 @restful_method
 def generate_devices(method, data, params):
-    try:
-        data = NetboxUtility().generate_devices()
 
-    except NetboxException as e:
-        logger.error(f'exception at netbox.generate_devices: {e.message}', exc_info=e)
-        return False, e.data, e.message
+    data = NetboxUtility().generate_devices()
 
     return True, data, 'Devices generated from Netbox datasource'
 
@@ -50,18 +43,13 @@ def synchronize_interfaces(method, data, params):
     if params.get('test') in ['false', 'False']:
         test = False
 
-    try:
-        return NetboxUtility(test).synchronize_interfaces()
-    except NetboxException as e:
-        return False, e.data, e.message
+    return NetboxUtility(test).synchronize_interfaces()
 
 
 @restful_method
 def generate_interfaces(method, data, params):
-    try:
-        data = NetboxUtility().generate_interfaces()
-    except NetboxException as e:
-        return False, { 'api_url': e.url, 'code': e.code }, e.message
+
+    data = NetboxUtility().generate_interfaces()
 
     return True, data, 'Interfaces generated from Netbox datasource'
 
@@ -72,20 +60,12 @@ def synchronize_igp(method, data, params):
     if params.get('test') in ['false', 'False']:
         test = False
 
-    try:
-        return NetboxUtility(test).synchronize_igp()
-    except NetboxException as e:
-        return False, e.data, e.message
+    return NetboxUtility(test).synchronize_igp()
 
 
 @restful_method
 def generate_igp(method, data, params):
-    try:
-        data = NetboxUtility().generate_igp()
-
-    except NetboxException as e:
-        logger.error(f'exception at generate_igp: {e.message}', exc_info=e)
-        return False, e.data, e.message
+    data = NetboxUtility().generate_igp()
 
     return True, data, 'IGP configuration generated from Netbox datasource'
 
@@ -96,21 +76,13 @@ def synchronize_ebgp(method, data, params):
     if params.get('test') in ['false', 'False']:
         test = False
 
-    try:
-        return NetboxUtility(test).synchronize_ebgp()
-    except NetboxException as e:
-        logger.error(f'exception at synchronize_ebgp: {e.message}', exc_info=e)
-        return False, e.data, e.message
+    return NetboxUtility(test).synchronize_ebgp()
 
 
 @restful_method
 def generate_ebgp(method, data, params):
-    try:
-        data = NetboxUtility().generate_ebgp()
 
-    except NetboxException as e:
-        logger.error(f'exception at generate_ebgp: {e.message}', exc_info=e)
-        return False, e.data, e.message
+    data = NetboxUtility().generate_ebgp()
 
     return True, data, 'Internal eBGP configuration generated from Netbox datasource'
 

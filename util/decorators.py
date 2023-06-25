@@ -1,5 +1,12 @@
+import logging
+
 from flask import Response, json
 from functools import wraps
+from .django_api import DjangoException
+from modules.pm import PMException
+from modules.netbox import NetboxException
+
+logger = logging.getLogger(__name__)
 
 def util_internal(func):
     """
@@ -50,18 +57,24 @@ def restful_method(methods=['GET']):
                 status = 404
 
             else:
-                result, out, comment = func(*args, **kwargs)
+                try:
+                    result, out, comment = func(*args, **kwargs)
 
-                assert isinstance(result, bool)
-                assert (out == None) or isinstance(out, dict), isinstance(comment, str)
+                    assert isinstance(result, bool)
+                    assert (out == None) or isinstance(out, dict), isinstance(comment, str)
 
-                ret = { 'result': result, 'error': False, 'comment': comment }
+                    ret = { 'result': result, 'error': False, 'comment': comment }
 
-                if out: ret.update({ 'out': out })
+                    if out: ret.update({ 'out': out })
 
-                status = 200
+                except DjangoException as e:
+                    logger.error(f'exception: {e.message}', exc_info=e)
+                    ret = { 'result': False, 'error': True, 'comment': e.message }
 
-            return Response(response = json.dumps(ret), status = status, mimetype = 'application/json')
+                except (PMException, NetboxException) as e:
+                    ret = { 'result': False, 'error': False, 'comment': e.message }
+
+            return Response(response = json.dumps(ret), status = 200, mimetype = 'application/json')
         return wrapped
 
     # allow decorator to be used without calling it (e.g. when no paramators required).
