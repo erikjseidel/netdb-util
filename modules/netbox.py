@@ -88,7 +88,8 @@ class NetboxUtility:
         result = self.nb_api.call_script({ 'data': data, 'commit': commit })
 
         # Location of the script's job
-        url = result['url']
+        if not (url := result.get('url')):
+            return False, result, 'Major script error!'
         self.nb_api.set_url(url)
 
         # Will continue to poll for 40 seconds before giving up.

@@ -16,6 +16,7 @@ __all__ = [
         'update_iface_descriptions',
         'renumber',
         'prune_ips',
+        'add_pni',
         ]
 
 logger = logging.getLogger(__name__)
@@ -138,3 +139,25 @@ def prune_ips(method, data, params):
         test=False
 
     return NetboxUtility(test).script_runner('renumber.PruneIPs')
+
+
+@restful_method
+def add_pni(method, data, params):
+    test=True
+    if params.get('test') in ['false', 'False']:
+        test=False
+
+    # Validate IP addresses
+    if ipv4 := data.get('my_ipv4'):
+        try:
+            ipaddress.IPv4Network(ipv4)
+        except ValueError:
+            return False, None, 'Invald IPv4 prefix'
+
+    if  ipv6 := data.get('my_ipv6'):
+        try:
+            ipaddress.IPv6Network(ipv6)
+        except ValueError:
+            return False, None, 'Invald IPv6 prefix'
+
+    return NetboxUtility(test).script_runner('add_pni.AddPNI', data)
