@@ -207,7 +207,7 @@ class PeeringManagerUtility:
 
         ret = self.pm_api.set('asns').post(asn)
 
-        return result, ret, 'ASN created'
+        return True, ret, 'ASN created'
 
 
     def peeringdb_asn_sync(self, name):
@@ -218,7 +218,7 @@ class PeeringManagerUtility:
 
         self.pm_api.set('asns').set_id(id).set_suffix('sync-with-peeringdb').post()
 
-        return result, None, 'ASN synchronized from peeringdb'
+        return True, None, 'ASN synchronized from peeringdb'
         
 
     def delete_asn(self, name):
@@ -229,7 +229,7 @@ class PeeringManagerUtility:
 
         self.pm_api.set('asns').set_id(id).delete()
 
-        return result, None, 'ASN deleted'
+        return True, None, 'ASN deleted'
 
 
     def create_direct_session(self, data):
