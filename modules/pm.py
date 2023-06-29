@@ -163,7 +163,7 @@ class PeeringManagerUtility:
 
         ret = self.pm_api.set('policies').post(policy)
 
-        return result, ret, 'Policy created'
+        return True, ret, 'Policy created'
 
 
     def delete_policy(self, name):
