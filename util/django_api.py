@@ -131,12 +131,8 @@ class DjangoAPI:
         else:
             resp = requests.post(url, headers = self._HEADERS)
 
+        out  = resp.json()
         code = resp.status_code
-
-        try:
-            out = resp.json()
-        except ValueError:
-            out = None
 
         if code not in range(200, 300):
             raise DjangoException(data=out, code=code, message=self._ERR_MSG)
@@ -149,19 +145,22 @@ class DjangoAPI:
         url = self.url
         logger.debug(f'PM.patch: {url}')
         resp = requests.patch(url, headers = self._HEADERS, json = data )
+
+        out  = resp.json()
         code = resp.status_code
 
         if code not in range(200, 300):
-            raise DjangoException(data=resp.json(), code=code, message=self._ERR_MSG)
+            raise DjangoException(data=out, code=code, message=self._ERR_MSG)
 
         self.clear_cache()
-        return resp.json()
+        return out
 
 
     def delete(self):
         url = self.url
         logger.debug(f'PM.patch: {url}')
         resp = requests.delete(url, headers = self._HEADERS)
+
         code = resp.status_code
 
         if code not in range(200, 300):

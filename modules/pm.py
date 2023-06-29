@@ -173,7 +173,7 @@ class PeeringManagerUtility:
 
         self.pm_api.set('policies').set_id(id).delete()
 
-        return result, None, 'Policy deleted'
+        return True, None, 'Policy deleted'
 
 
     def generate_policies(self, pm_object, policies, family):

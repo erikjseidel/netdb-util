@@ -69,10 +69,16 @@ def restful_method(methods=['GET']):
 
                 except DjangoException as e:
                     logger.error(f'Exception occured: {e.message}', exc_info=e)
+                    out = e.data
                     ret = { 'result': False, 'error': True, 'comment': e.message }
 
                 except (PMException, NetboxException) as e:
+                    out = e.data
                     ret = { 'result': False, 'error': False, 'comment': e.message }
+
+                if out:
+                    ret.update({'out': out})
+
 
             return Response(response = json.dumps(ret), status = 200, mimetype = 'application/json')
         return wrapped
