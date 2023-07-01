@@ -1,10 +1,10 @@
 import logging
-
 from flask import Response, json
 from functools import wraps
 from .django_api import DjangoException
 from modules.pm import PMException
 from modules.netbox import NetboxException
+from modules.ripe import RipeStatException
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ def restful_method(methods=['GET']):
                     out = e.data
                     ret = { 'result': False, 'error': True, 'comment': e.message }
 
-                except (PMException, NetboxException) as e:
+                except (PMException, NetboxException, RipeStatException) as e:
                     out = e.data
                     ret = { 'result': False, 'error': False, 'comment': e.message }
 
