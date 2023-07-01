@@ -29,4 +29,6 @@ def looking_glass(method, data, params):
     if not ( isinstance(lookback, int) and lookback in range(60, 86401) ):
         return False, None, 'lookback out of range'
 
-    return RipeStatUtility().looking_glass(prefix, lookback)
+    out = RipeStatUtility().looking_glass(prefix, lookback)
+
+    return True, out, f'RipeStat looking glass result for {prefix}'

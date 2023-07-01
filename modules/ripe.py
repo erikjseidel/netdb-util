@@ -85,6 +85,4 @@ class RipeStatUtility:
 
     def looking_glass(self, prefix, lookback=300):
 
-        ret = self.rs_api.set('looking-glass').set_params(resource=prefix, look_back_limit=lookback).get()
-
-        return True, ret, f'RipeStat looking glass result for {prefix}'
+        return self.rs_api.set('looking-glass').set_params(resource=prefix, look_back_limit=lookback).get()
