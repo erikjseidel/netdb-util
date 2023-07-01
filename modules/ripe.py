@@ -1,9 +1,9 @@
 import requests, json, logging, netaddr
-from util.django_api import DjangoException
+from util.web_api import WebAPIException
 
 logger = logging.getLogger(__name__)
 
-class RipeStatException(DjangoException):
+class RipeStatException(WebAPIException):
     pass
 
 

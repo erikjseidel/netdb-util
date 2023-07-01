@@ -1,20 +1,10 @@
 import requests, json, logging, yaml, ipaddress
+from .web_api import WebAPIException
 
 logger = logging.getLogger(__name__)
 
-class DjangoException(Exception):
-    """Exception raised for failed / unexpected Django API calls / results
-
-    Attributes:
-        url     -- CF API url
-        message -- explanation of the error
-    """
-    def __init__(self, url=None, data=None, code=None, message=None):
-        self.url     = url
-        self.data    = data
-        self.code    = code
-        self.message = message
-        super().__init__(self.message)
+class DjangoException(WebAPIException):
+    pass
 
 
 class DjangoAPI:

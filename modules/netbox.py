@@ -2,7 +2,8 @@ import requests, json, logging, time, yaml, ipaddress, re
 from copy import deepcopy
 from config import netbox
 from util import synchronizers
-from util.django_api import DjangoAPI, DjangoException
+from util.django_api import DjangoAPI
+from util.web_api import WebAPIException
 
 _DATASOURCE = netbox.NETBOX_SOURCE['name']
 
@@ -63,7 +64,7 @@ class NetboxAPI(DjangoAPI):
         return resp.json()
 
 
-class NetboxException(DjangoException):
+class NetboxException(WebAPIException):
     pass
 
 

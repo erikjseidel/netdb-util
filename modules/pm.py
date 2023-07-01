@@ -4,7 +4,8 @@ from copy import deepcopy
 from config import pm
 from schema import pm as pm_schema
 from util import synchronizers
-from util.django_api import DjangoAPI, DjangoException
+from util.django_api import DjangoAPI
+from util.web_api import WebAPIException
 
 _DATASOURCE = pm.PM_SOURCE['name']
 
@@ -36,7 +37,7 @@ class PeeringManagerAPI(DjangoAPI):
         }
 
 
-class PMException(DjangoException):
+class PMException(WebAPIException):
     pass
 
 
