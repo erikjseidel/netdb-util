@@ -103,10 +103,9 @@ class RipeStatUtility:
                     else:
                         as_paths[ peer['as_path'] ] = 1
 
-        out = {
+        entry = {
                 'datasource' : 'ripestat',
-                'prefix'     : prefix,
                 'as_paths'   : as_paths,
                 }
 
-        return out
+        return { prefix : entry }
