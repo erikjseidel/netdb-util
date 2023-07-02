@@ -5,6 +5,7 @@ from modules.ripe import RipeStatUtility
 # Public symbols
 __all__ = [
         'looking_glass',
+        'get_paths',
         ]
 
 logger = logging.getLogger(__name__)
@@ -32,3 +33,21 @@ def looking_glass(method, data, params):
     out = RipeStatUtility().looking_glass(prefix, lookback)
 
     return True, out, f'RipeStat looking glass result for {prefix}'
+
+
+@restful_method
+def get_paths(method, data, params):
+    prefix = params.get('prefix')
+
+    if not prefix:
+        return False, None, 'prefix required'
+
+    try:
+        netaddr.IPNetwork(prefix)
+
+    except netaddr.core.AddrFormatError:
+        return False, None, 'Invalid prefix'
+
+    out = RipeStatUtility().get_paths(prefix)
+
+    return True, out, f'RipeStat LG AS paths for {prefix}'

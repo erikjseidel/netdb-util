@@ -86,3 +86,27 @@ class RipeStatUtility:
     def looking_glass(self, prefix, lookback=300):
 
         return self.rs_api.set('looking-glass').set_params(resource=prefix, look_back_limit=lookback).get()
+
+
+    def get_paths(self, prefix):
+        as_paths = {}
+
+        result = self.looking_glass(prefix)
+
+        rrcs = result['data']['rrcs']
+
+        if len(rrcs) > 0:
+            for rrc in rrcs:
+                for peer in rrc['peers']:
+                    if peer['as_path'] in as_paths:
+                        as_paths[ peer['as_path'] ] += 1
+                    else:
+                        as_paths[ peer['as_path'] ] = 1
+
+        out = {
+                'datasource' : 'ripestat',
+                'prefix'     : prefix,
+                'as_paths'   : as_paths,
+                }
+
+        return out
