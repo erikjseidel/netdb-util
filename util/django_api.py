@@ -105,7 +105,7 @@ class DjangoAPI:
             self._GET_CACHE[url] = resp
         
         if (code := resp.status_code) not in [200, 404]:
-            raise PMException(url, resp.json(), code)
+            raise DjangoException(url, resp.json(), code)
 
         if 'results' in ( json := resp.json() ):
             return json['results']
