@@ -16,7 +16,9 @@ __all__ = [
         'update_iface_descriptions',
         'renumber',
         'prune_ips',
-        'add_pni',
+        'create_pni',
+        'create_bundle',
+        'configure_pni',
         ]
 
 logger = logging.getLogger(__name__)
@@ -142,7 +144,25 @@ def prune_ips(method, data, params):
 
 
 @restful_method
-def add_pni(method, data, params):
+def create_pni(method, data, params):
+    test=True
+    if params.get('test') in ['false', 'False']:
+        test=False
+
+    return NetboxUtility(test).script_runner('add_pni.CreatePNI', data)
+
+
+@restful_method
+def create_bundle(method, data, params):
+    test=True
+    if params.get('test') in ['false', 'False']:
+        test=False
+
+    return NetboxUtility(test).script_runner('add_pni.CreateBundle', data)
+
+
+@restful_method
+def configure_pni(method, data, params):
     test=True
     if params.get('test') in ['false', 'False']:
         test=False
@@ -160,4 +180,4 @@ def add_pni(method, data, params):
         except ValueError:
             return False, None, 'Invald IPv6 prefix'
 
-    return NetboxUtility(test).script_runner('add_pni.AddPNI', data)
+    return NetboxUtility(test).script_runner('add_pni.ConfigurePNI', data)
