@@ -327,7 +327,7 @@ class NetboxUtility:
                             'members'     : [],
                         }
 
-                    if min_links := interface['custom_fields']['lacp_min_links']:
+                    if min_links := interface['custom_fields'].get('lacp_min_links'):
                         entry['lacp']['min_links'] = min_links
 
                     if 'layer3+4' in tags:
