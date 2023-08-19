@@ -5,6 +5,7 @@ from .django_api import DjangoException
 from modules.pm import PMException
 from modules.netbox import NetboxException
 from modules.ripe import RipeStatException
+from util.web_api import WebAPIException
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ def restful_method(methods=['GET']):
                     out = e.data
                     ret = { 'result': False, 'error': True, 'comment': e.message }
 
-                except (PMException, NetboxException, RipeStatException) as e:
+                except (PMException, NetboxException, RipeStatException, WebAPIException) as e:
                     out = e.data
                     ret = { 'result': False, 'error': False, 'comment': e.message }
 
