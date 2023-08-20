@@ -1,15 +1,19 @@
+import logging, yaml, json
 from pathlib import Path
-import yaml, json
 from util.web_api import WebAPIException
 from copy import deepcopy
+from jinja2 import Environment, FileSystemLoader
+from util import netdb
 
 from pprint import pprint
 
+_NETDB_DEV_COLUMN = 'device'
+REPO_BASE='/srv/repo_yaml'
+
 class RepoUtility:
-    REPO_BASE='/srv/repo_yaml'
 
     def __init__(self):
-        path = f'{self.REPO_BASE}/top.yaml'
+        path = f'{REPO_BASE}/top.yaml'
 
         try:
             self.top = yaml.safe_load(Path(path).read_text())
@@ -21,6 +25,46 @@ class RepoUtility:
         if not isinstance(self.top, dict) or 'base' not in self.top.keys():
             raise WebAPIException(message=f'base not found in top file {path}')
 
+        result, self.devices, message = netdb.get(_NETDB_DEV_COLUMN)
+        if not result:
+            raise WebAPIException(message=f'netdb device get failure: {message}')
+
+
+    def _load_templates(self, filenames):
+        environment = Environment(loader=FileSystemLoader(REPO_BASE))
+
+        out = []
+
+        for filename in filenames:
+            print(filename)
+            out.append({
+                 'name' : f'{filename}.yaml',
+                 'data' : environment.get_template(f'{filename}.yaml'),
+                })
+
+        return out
+
+
+    def _render_templates(self, node, templates):
+        out = {}
+
+        for template in templates:
+            filename = template['name']
+
+            try:
+                rendered = template['data'].render( device=self.devices[node], devices=self.devices)
+            except Exception as e:
+                raise WebAPIException(message=f'Jinja2 rendering exception for {{filename}}: {e.message}')
+
+            try:
+                in_data = yaml.safe_load(rendered)
+            except Exception as e:
+                raise WebAPIException(message=f'YAML load exception for {filename}: Invalid YAML data')
+
+            out.update(in_data)
+
+        return out
+
 
     def generate_column(self, column):
         out = {}
@@ -30,55 +74,31 @@ class RepoUtility:
 
         node_sets = self.top.get('node_sets', {})
 
-        common = {}
+        common_templates = []
         if filenames := directory.pop('*', None):
-            for filename in filenames:
-                path = f'{self.REPO_BASE}/{filename}.yaml'
-                try:
-                    in_data = yaml.safe_load(Path(path).read_text())
-                except FileNotFoundError:
-                    in_data = {}
-
-                common.update(in_data)
+            common_templates = self._load_templates(filenames)
 
         for node_set, nodes in node_sets.items():
-            set_data = {}
+            if node_set in directory:
+                templates = []
 
-            if set_files := directory.pop(node_set, None):
-                for filename in set_files:
-                    path = f'{self.REPO_BASE}/{filename}.yaml'
-                    print(path)
-                    try:
-                        in_data = yaml.safe_load(Path(path).read_text())
-                    except FileNotFoundError:
-                        in_data = {}
+                if set_files := directory.pop(node_set, None):
+                    templates = self._load_templates(set_files)
 
-                    set_data.update(in_data)
-
-            if set_data:
                 for node in nodes:
-                    out[node] = deepcopy(common)
-                    out[node].update(deepcopy(set_data))
+                    node_data = self._render_templates(node, common_templates + templates)
 
-                 #   print('#####################' + node + '#################')
-                 #   print(yaml.dump(out))
-
+                    out[node] = deepcopy(node_data)
 
         for node, node_files in directory.items():
-            node_data = {}
-            for filename in node_files:
-                path = f'{self.REPO_BASE}/{filename}.yaml'
-                try:
-                    in_data = yaml.safe_load(Path(path).read_text())
-                except FileNotFoundError:
-                    in_data = {}
+            node_templates = self._load_templates(node_files)
 
-                node_data.update(in_data)
+            if node not in out.keys():
+                out[node] = {}
+                node_templates = common_templates + node_templates
 
-            if node_data:
-                if node not in out.keys():
-                    out[node] = deepcopy(common)
+            node_data = self._render_templates(node, node_templates)
 
-                out[node].update(deepcopy(node_data))
+            out[node].update(deepcopy(node_data))
 
         return out
