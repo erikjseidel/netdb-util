@@ -4,11 +4,9 @@ from util.web_api import WebAPIException
 from copy import deepcopy
 from jinja2 import Environment, FileSystemLoader
 from util import netdb
-
-from pprint import pprint
+from config.repo_yaml import REPO_BASE, REPO_SOURCE
 
 _NETDB_DEV_COLUMN = 'device'
-REPO_BASE='/srv/repo_yaml'
 
 class RepoUtility:
 
@@ -36,11 +34,13 @@ class RepoUtility:
         out = []
 
         for filename in filenames:
-            print(filename)
-            out.append({
-                 'name' : f'{filename}.yaml',
-                 'data' : environment.get_template(f'{filename}.yaml'),
-                })
+            try:
+                out.append({
+                     'name' : f'{filename}.yaml',
+                     'data' : environment.get_template(f'{filename}.yaml'),
+                    })
+            except Exception as e:
+                raise WebAPIException(message=f'Jinja2 load exception for {filename}.yaml: {e.message}')
 
         return out
 
@@ -52,9 +52,9 @@ class RepoUtility:
             filename = template['name']
 
             try:
-                rendered = template['data'].render( device=self.devices[node], devices=self.devices)
+                rendered = template['data'].render(node=node, device=self.devices[node], devices=self.devices)
             except Exception as e:
-                raise WebAPIException(message=f'Jinja2 rendering exception for {{filename}}: {e.message}')
+                raise WebAPIException(message=f'Jinja2 rendering exception for {filename}: {e.message}')
 
             try:
                 in_data = yaml.safe_load(rendered)
@@ -67,7 +67,11 @@ class RepoUtility:
 
 
     def generate_column(self, column):
-        out = {}
+        out = {
+                'datasource' : REPO_SOURCE['name'],
+                'weight'     : REPO_SOURCE['weight'],
+                }
+
 
         if not (directory := self.top['base'].get(column)):
             raise WebAPIException(message=f'column {column} not found in base')
