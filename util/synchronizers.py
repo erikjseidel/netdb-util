@@ -213,7 +213,7 @@ def interfaces(datasource, sot_interfaces, test=True):
     for device, interfaces in sot_interfaces.items():
         changes  = {}
         for iface, data in interfaces.items():
-            if iface in netdb_ifaces[device].keys():
+            if device in netdb_ifaces and iface in netdb_ifaces[device].keys():
                 if data != netdb_ifaces[device][iface]:
                     # Update required.
                     changes[iface] = _MSG_UPDATE % adjective
@@ -227,12 +227,13 @@ def interfaces(datasource, sot_interfaces, test=True):
                 changes[iface] = _MSG_ADD % adjective
 
         # Any remaining (unpopped) interfaces in netdb need to be deleted
-        for iface in netdb_ifaces[device].keys():
-            # Deletion required
-            if not test:
-                filt = { "set_id": [device, iface], **_FILTER }
-                netdb.delete(_NETDB_IFACE_COLUMN, data = filt)
-            changes[iface] = _MSG_DELETE % adjective
+        if device in netdb_ifaces:
+            for iface in netdb_ifaces[device].keys():
+                # Deletion required
+                if not test:
+                    filt = { "set_id": [device, iface], **_FILTER }
+                    netdb.delete(_NETDB_IFACE_COLUMN, data = filt)
+                changes[iface] = _MSG_DELETE % adjective
 
         if changes:
             all_changes[device] = changes

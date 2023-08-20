@@ -72,7 +72,6 @@ class RepoUtility:
                 'weight'     : REPO_SOURCE['weight'],
                 }
 
-
         if not (directory := self.top['base'].get(column)):
             raise WebAPIException(message=f'column {column} not found in base')
 
@@ -106,3 +105,17 @@ class RepoUtility:
             out[node].update(deepcopy(node_data))
 
         return out
+
+
+    def reload_column(self, column):
+        data = self.generate_column(column)
+        if not data:
+            # Don't reload an empty set
+            return None
+
+        try:
+            netdb.reload(column, data)
+        except netdb.NetdbException as e:
+            raise WebAPIException(data=e.data, message=e.message)
+
+        return data

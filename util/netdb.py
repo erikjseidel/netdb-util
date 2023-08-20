@@ -1,5 +1,7 @@
 import requests, json, logging
 
+from pprint import pprint
+
 NETDB_URL = "http://127.0.0.1:8001/api/"
 
 HEADERS = {
@@ -60,7 +62,6 @@ def validate(column, data):
     if ret['error']:
         raise NetdbException(url, ret.get(out), ret['comment'])
 
-
     return ret['result'], ret.get('out'), ret['comment']
 
 
@@ -68,6 +69,23 @@ def add(column, data):
     url = NETDB_URL + column
 
     logger.debug(f'_netdb_add: { url }')
+
+    try:
+        ret = requests.post(url, data = json.dumps(data), headers = HEADERS).json()
+    except Exception:
+        raise NetdbException(url, data, 'Invalid netdb response')
+
+    if ret['error'] or not ret['result']:
+        raise NetdbException(url, ret.get('out'), ret['comment'])
+
+
+def reload(column, data):
+    url = NETDB_URL + column + '/reload/' + data['datasource']
+
+    if "_schema" in data:
+        pprint(data['_schema'])
+
+    logger.debug(f'_netdb_reload: { url }')
 
     try:
         ret = requests.post(url, data = json.dumps(data), headers = HEADERS).json()
