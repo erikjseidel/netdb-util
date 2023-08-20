@@ -1,7 +1,5 @@
 import requests, json, logging
 
-from pprint import pprint
-
 NETDB_URL = "http://127.0.0.1:8001/api/"
 
 HEADERS = {
@@ -81,9 +79,6 @@ def add(column, data):
 
 def reload(column, data):
     url = NETDB_URL + column + '/reload/' + data['datasource']
-
-    if "_schema" in data:
-        pprint(data['_schema'])
 
     logger.debug(f'_netdb_reload: { url }')
 

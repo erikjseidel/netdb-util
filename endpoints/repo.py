@@ -23,7 +23,7 @@ def generate_column(method, data, params):
     return bool(data), data, msg
 
 
-@restful_method
+@restful_method(methods=['POST'])
 def reload_column(method, data, params):
     column = params.get('column')
 
