@@ -4,10 +4,6 @@ from modules.netbox import NetboxUtility
 
 # Public symbols
 __all__ = [
-        'synchronize_devices',
-        'synchronize_interfaces',
-        'synchronize_igp',
-        'synchronize_ebgp',
         'generate_devices',
         'generate_interfaces',
         'generate_igp',
@@ -28,43 +24,11 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 @restful_method
-def synchronize_devices(method, data, params):
-    test = True
-    if params.get('test') in ['false', 'False']:
-        test = False
-
-    return NetboxUtility(test).synchronize_devices()
-
-
-@restful_method(methods=['POST'])
-def reload_devices(method, data, params):
-    data = NetboxUtility().reload_devices()
-
-    return True, data, 'Devices column reloaded from Netbox datasource'
-
-
-@restful_method
 def generate_devices(method, data, params):
 
     data = NetboxUtility().generate_devices()
 
     return True, data, 'Devices generated from Netbox datasource'
-
-
-@restful_method
-def synchronize_interfaces(method, data, params):
-    test = True
-    if params.get('test') in ['false', 'False']:
-        test = False
-
-    return NetboxUtility(test).synchronize_interfaces()
-
-
-@restful_method(methods=['POST'])
-def reload_interfaces(method, data, params):
-    data = NetboxUtility().reload_interfaces()
-
-    return True, data, 'Interfaces column reloaded from Netbox datasource'
 
 
 @restful_method
@@ -76,12 +40,32 @@ def generate_interfaces(method, data, params):
 
 
 @restful_method
-def synchronize_igp(method, data, params):
-    test = True
-    if params.get('test') in ['false', 'False']:
-        test = False
+def generate_igp(method, data, params):
+    data = NetboxUtility().generate_igp()
 
-    return NetboxUtility(test).synchronize_igp()
+    return True, data, 'IGP configuration generated from Netbox datasource'
+
+
+@restful_method
+def generate_ebgp(method, data, params):
+
+    data = NetboxUtility().generate_ebgp()
+
+    return True, data, 'Internal eBGP configuration generated from Netbox datasource'
+
+
+@restful_method(methods=['POST'])
+def reload_devices(method, data, params):
+    data = NetboxUtility().reload_devices()
+
+    return True, data, 'Devices column reloaded from Netbox datasource'
+
+
+@restful_method(methods=['POST'])
+def reload_interfaces(method, data, params):
+    data = NetboxUtility().reload_interfaces()
+
+    return True, data, 'Interfaces column reloaded from Netbox datasource'
 
 
 @restful_method(methods=['POST'])
@@ -91,35 +75,11 @@ def reload_igp(method, data, params):
     return True, data, 'IGP column reloaded from Netbox datasource'
 
 
-@restful_method
-def generate_igp(method, data, params):
-    data = NetboxUtility().generate_igp()
-
-    return True, data, 'IGP configuration generated from Netbox datasource'
-
-
-@restful_method
-def synchronize_ebgp(method, data, params):
-    test = True
-    if params.get('test') in ['false', 'False']:
-        test = False
-
-    return NetboxUtility(test).synchronize_ebgp()
-
-
 @restful_method(methods=['POST'])
 def reload_ebgp(method, data, params):
     data = NetboxUtility().reload_ebgp()
 
     return True, data, 'eBGP column reloaded from Netbox datasource'
-
-
-@restful_method
-def generate_ebgp(method, data, params):
-
-    data = NetboxUtility().generate_ebgp()
-
-    return True, data, 'Internal eBGP configuration generated from Netbox datasource'
 
 
 @restful_method
