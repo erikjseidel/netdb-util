@@ -7,8 +7,8 @@ __all__ = [
         'generate_direct_sessions',
         'generate_ixp_sessions',
         'generate_session',
-        'synchronize_sessions',
-        'synchronize_session',
+        'reload_ebgp',
+        'reload_session',
         'set_status',
         'create_policy',
         'delete_policy',
@@ -54,28 +54,24 @@ def generate_session(method, data, params):
     return bool(data), data, msg
 
 
-@restful_method
-def synchronize_sessions(method, data, params):
-    test = True
-    if params.get('test') in ['false', 'False']:
-        test = False
+@restful_method(methods=['POST'])
+def reload_ebgp(method, data, params):
+    data = PeeringManagerUtility().reload_ebgp()
 
-    return PeeringManagerUtility(test).synchronize_sessions()
+    return True, data, 'eBGP data reloaded into column from Peering Manager datasource'
 
 
-@restful_method
-def synchronize_session(method, data, params):
+@restful_method(methods=['POST'])
+def reload_session(method, data, params):
     device = params.get('device')
     ip = params.get('ip')
 
     if not (device and ip):
         return False, None, 'device and ip parameters required'
 
-    test = True
-    if params.get('test') in ['false', 'False']:
-        test = False
+    data = PeeringManagerUtility().reload_session(device, ip)
 
-    return PeeringManagerUtility(test).synchronize_session(device, ip)
+    return True, data, 'eBGP session reloaded into column from Peering Manager datasource'
 
 
 @restful_method(methods=['PUT'])

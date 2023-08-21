@@ -1,7 +1,7 @@
 import requests, json, logging, time, yaml, ipaddress, re
 from copy import deepcopy
 from config import netbox
-from util import synchronizers, netdb
+from util import netdb
 from util.django_api import DjangoAPI
 from util.web_api import WebAPIException
 
@@ -577,22 +577,10 @@ class NetboxUtility:
         return out
 
 
-    def synchronize_devices(self):
-        netbox_dev = self.generate_devices()
-
-        return synchronizers.devices(_DATASOURCE, netbox_dev, self.test)
-
-
     def reload_devices(self):
         data = self.generate_devices()
 
         return netdb.reload(_DEVICES_COLUMN, data)
-
-
-    def synchronize_interfaces(self):
-        netbox_ifaces = self.generate_interfaces()
-
-        return synchronizers.interfaces(_DATASOURCE, netbox_ifaces, self.test)
 
 
     def reload_interfaces(self):
@@ -601,22 +589,10 @@ class NetboxUtility:
         return netdb.reload(_IFACES_COLUMN, data)
 
 
-    def synchronize_igp(self):
-        netbox_igp = self.generate_igp()
-
-        return synchronizers.igp(_DATASOURCE, netbox_igp, self.test)
-
-
     def reload_igp(self):
         data = self.generate_igp()
 
         return netdb.reload(_IGP_COLUMN, data)
-
-
-    def synchronize_ebgp(self):
-        netbox_ebgp = self.generate_ebgp()
-
-        return synchronizers.bgp_sessions(_DATASOURCE, netbox_ebgp, self.test)
 
 
     def reload_ebgp(self):

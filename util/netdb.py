@@ -86,25 +86,28 @@ def _reload(column, data):
     try:
         ret = requests.post(url, data = json.dumps(data), headers = HEADERS).json()
     except Exception:
-        raise NetdbException(url, data, 'Invalid netdb response')
+        raise NetdbException(url, None, 'Invalid netdb response')
 
     if ret.get('error') or not ret['result']:
         raise NetdbException(url, ret.get('out'), ret['comment'])
 
 
 def reload(column, data):
-        if not data:
-            raise WebAPIException(message=f'Empty result! Column {column} not reloaded')
+    if not data:
+        raise WebAPIException(message=f'Empty result! Column {column} not reloaded')
 
-        try:
-            _reload(column, data)
-        except netdb.NetdbException as e:
-            raise WebAPIException(data=e.data, message=e.message)
+    try:
+        _reload(column, data)
+    except NetdbException as e:
+        raise WebAPIException(data=e.data, message=e.message)
 
-        return data
+    return data
 
 
 def replace(column, data):
+    if not data:
+        raise WebAPIException(message=f'Empty result! Nothing replaced.')
+
     url = NETDB_URL + column
 
     logger.debug(f'_netdb_replace: { url }')
@@ -112,10 +115,12 @@ def replace(column, data):
     try:
         ret = requests.put(url, data = json.dumps(data), headers = HEADERS).json()
     except Exception:
-        raise NetdbException(url, data, 'Invalid netdb response')
+        raise WebAPIException(message='Invalid netdb response')
 
     if ret.get('error') or not ret['result']:
-        raise NetdbException(url, ret.get('out'), ret['comment'])
+        raise WebAPIException(data=ret.get('out'), message=ret['comment'])
+
+    return data
 
 
 def delete(column, data):
@@ -126,7 +131,7 @@ def delete(column, data):
     try:
         ret = requests.delete(url, data = json.dumps(data), headers = HEADERS).json()
     except Exception:
-        raise NetdbException(url, data, 'Invalid netdb response')
+        raise WebAPIException(message='Invalid netdb response')
 
     if ret.get('error') or not ret['result']:
-        raise NetdbException(url, None, ret['comment'])
+        raise WebAPIException(data=ret.get('out'), message=ret['comment'])

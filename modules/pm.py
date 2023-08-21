@@ -3,11 +3,14 @@ from marshmallow import ValidationError
 from copy import deepcopy
 from config import pm
 from schema import pm as pm_schema
-from util import synchronizers
+from util import netdb
 from util.django_api import DjangoAPI
 from util.web_api import WebAPIException
 
+from pprint import pprint
+
 _DATASOURCE = pm.PM_SOURCE['name']
+_BGP_COLUMN = 'bgp'
 
 logger = logging.getLogger(__name__)
 
@@ -263,11 +266,9 @@ class PeeringManagerUtility:
 
         ret = self.pm_api.set('direct-sessions').post(session)
 
-        result, out, comment = self.synchronize_session(device, remote_ip)
-        if not result:
-            return True, out, f'Addition to PM complete. {comment}'
+        out = self.reload_session(device, remote_ip)
 
-        return result, out, 'Direct session created in Peering Manager'
+        return True, out, 'Direct session created in Peering Manager'
 
 
     def update_direct_session(self, data):
@@ -294,11 +295,9 @@ class PeeringManagerUtility:
 
         ret = self.pm_api.set('direct-sessions').set_id(id).patch(session)
 
-        result, out, comment = self.synchronize_session(device, remote_ip)
-        if not result:
-            return True, out, f'PM update complete. {comment}'
+        out = self.reload_session(device, remote_ip)
 
-        return result, out, 'Direct session updated in Peering Manager'
+        return True, out, 'Direct session updated in Peering Manager'
 
 
     def delete_direct_session(self, device, ip):
@@ -308,11 +307,11 @@ class PeeringManagerUtility:
 
         self.pm_api.set('direct-sessions').set_id(id).delete()
 
-        result, out, comment = self.synchronize_session(device, ip)
-        if not result:
-            return True, out, f'Deletion from PM complete. {comment}'
+        filt = [device, 'neighbors', ip]
 
-        return result, out, 'Direct session deleted in Peering Manager'
+        netdb.delete(_BGP_COLUMN, filt)
+
+        return result, None, 'Direct session deleted in Peering Manager'
 
 
     def generate_direct_session_base(self, session):
@@ -359,8 +358,6 @@ class PeeringManagerUtility:
                 'password'   : session.get('password'),
                 'source'     : source_ip.split('/')[0] if source_ip else None,
                 'type'       : 'ebgp',
-                'datasource' : _DATASOURCE,
-                'weight'     : pm.PM_SOURCE['weight'],
                 }
 
         if group and ( group_context := group.get('local_context_data') ):
@@ -470,8 +467,6 @@ class PeeringManagerUtility:
                 'remote_asn' : session['autonomous_system'].get('asn'),
                 'password'   : session.get('password'),
                 'type'       : 'ebgp',
-                'datasource' : _DATASOURCE,
-                'weight'     : pm.PM_SOURCE['weight'],
                 }
 
         for g in [ session, connection, ixp ]:
@@ -546,7 +541,11 @@ class PeeringManagerUtility:
     def generate_direct_sessions(self):
         sessions = self.pm_api.set('direct-sessions').get()
 
-        out = {}
+        out = {
+                'datasource' : _DATASOURCE,
+                'weight'     : pm.PM_SOURCE['weight'],
+                }
+
         if sessions:
             for session in sessions:
                 result = self.generate_direct_session_base(session)
@@ -556,6 +555,8 @@ class PeeringManagerUtility:
                 if not out.get(result['device']):
                     out[ result['device'] ] = { 'neighbors' : {} }
                 out[ result['device'] ]['neighbors'][ result['ip'] ] = result['data']
+        else:
+            return None
 
         return out
 
@@ -563,7 +564,11 @@ class PeeringManagerUtility:
     def generate_direct_session(self, id):
         session = self.pm_api.set('direct-sessions').set_id(id).get()
 
-        out = {}
+        out = {
+                'datasource' : _DATASOURCE,
+                'weight'     : pm.PM_SOURCE['weight'],
+                }
+
         if session.get('id'):
             result = self.generate_direct_session_base(session)
             if not result:
@@ -571,6 +576,8 @@ class PeeringManagerUtility:
 
             out[ result['device'] ] = { 'neighbors' : {} }
             out[ result['device'] ]['neighbors'][ result['ip'] ] = result['data']
+        else:
+            return None
 
         return out
 
@@ -578,7 +585,11 @@ class PeeringManagerUtility:
     def generate_ixp_sessions(self):
         sessions = self.pm_api.set('ixp-sessions').get()
 
-        out = {}
+        out = {
+                'datasource' : _DATASOURCE,
+                'weight'     : pm.PM_SOURCE['weight'],
+                }
+
         if sessions:
             for session in sessions:
                 result = self.generate_ixp_session_base(session)
@@ -588,6 +599,8 @@ class PeeringManagerUtility:
                 if not out.get(result['device']):
                     out[ result['device'] ] = { 'neighbors' : {} }
                 out[ result['device'] ]['neighbors'][ result['ip'] ] = result['data']
+        else:
+            return None
 
         return out
 
@@ -595,7 +608,11 @@ class PeeringManagerUtility:
     def generate_ixp_session(self, id):
         session = self.pm_api.set('ixp-sessions').set_id(id).get()
 
-        out = {}
+        out = {
+                'datasource' : _DATASOURCE,
+                'weight'     : pm.PM_SOURCE['weight'],
+                }
+
         if session.get('id'):
             result = self.generate_ixp_session_base(session)
             if not result:
@@ -603,6 +620,8 @@ class PeeringManagerUtility:
 
             out[ result['device'] ] = { 'neighbors' : {} }
             out[ result['device'] ]['neighbors'][ result['ip'] ] = result['data']
+        else:
+            return None
 
         return out
 
@@ -622,23 +641,36 @@ class PeeringManagerUtility:
         return out
 
 
-    def synchronize_sessions(self):
+    def generate_ebgp(self):
         pm_sessions = self.generate_ixp_sessions()
      
         # Pull direct sessions and merge them on top of IXP sessions.
-        for session, neighbors in self.generate_direct_sessions().items():
-            if not pm_sessions.get(session):
-                pm_sessions[session] = { 'neighbors' : {} }
+        for device, neighbors in self.generate_direct_sessions().items():
+            if device in ['datasource', 'weight']:
+                continue
+
+            if not pm_sessions.get(device):
+                pm_sessions[device] = { 'neighbors' : {} }
             for neighbor, bgp_data in neighbors.get('neighbors').items():
-                pm_sessions[session]['neighbors'][neighbor] = bgp_data
+                pm_sessions[device]['neighbors'][neighbor] = bgp_data
 
-        return synchronizers.bgp_sessions(_DATASOURCE, pm_sessions, self.test)
+        return pm_sessions
 
 
-    def synchronize_session(self, device, ip):
-        pm_session = self.generate_session(device, ip)
+    def reload_session(self, device, ip):
+        if not (pm_session := self.generate_session(device, ip)):
+            raise PMException(message=f'Neighbor not found!')
 
-        return synchronizers.bgp_session(_DATASOURCE, pm_session, device, ip, self.test)
+        pm_session[device]['neighbors'][ip]['datasource'] = pm_session.pop('datasource')
+        pm_session[device]['neighbors'][ip]['weight'] = pm_session.pop('weight')
+
+        return netdb.replace(_BGP_COLUMN, pm_session)
+
+
+    def reload_ebgp(self):
+        data = self.generate_ebgp()
+
+        return netdb.reload(_BGP_COLUMN, data)
 
 
     def set_status(self, device, ip, status):
@@ -665,5 +697,5 @@ class PeeringManagerUtility:
 
         self.pm_api.patch(data)
 
-        # Synchronize netdb and return
-        return self.synchronize_session(device, ip)
+        # Reload netdb entry and return
+        return True, self.reload_session(device, ip), 'Status updated.'
