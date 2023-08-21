@@ -8,6 +8,8 @@ from config.repo_yaml import REPO_BASE, REPO_SOURCE
 
 _NETDB_DEV_COLUMN = 'device'
 
+logger = logging.getLogger(__name__)
+
 class RepoUtility:
 
     def __init__(self):
