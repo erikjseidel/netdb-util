@@ -1,4 +1,5 @@
 import requests, json, logging
+from util.web_api import WebAPIException
 
 NETDB_URL = "http://127.0.0.1:8001/api/"
 
@@ -77,7 +78,7 @@ def add(column, data):
         raise NetdbException(url, ret.get('out'), ret['comment'])
 
 
-def reload(column, data):
+def _reload(column, data):
     url = NETDB_URL + column + '/reload/' + data['datasource']
 
     logger.debug(f'_netdb_reload: { url }')
@@ -87,8 +88,20 @@ def reload(column, data):
     except Exception:
         raise NetdbException(url, data, 'Invalid netdb response')
 
-    if ret['error'] or not ret['result']:
+    if ret.get('error') or not ret['result']:
         raise NetdbException(url, ret.get('out'), ret['comment'])
+
+
+def reload(column, data):
+        if not data:
+            raise WebAPIException(message=f'Empty result! Column {column} not reloaded')
+
+        try:
+            _reload(column, data)
+        except netdb.NetdbException as e:
+            raise WebAPIException(data=e.data, message=e.message)
+
+        return data
 
 
 def replace(column, data):

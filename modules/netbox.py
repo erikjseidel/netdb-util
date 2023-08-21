@@ -1,11 +1,15 @@
 import requests, json, logging, time, yaml, ipaddress, re
 from copy import deepcopy
 from config import netbox
-from util import synchronizers
+from util import synchronizers, netdb
 from util.django_api import DjangoAPI
 from util.web_api import WebAPIException
 
 _DATASOURCE = netbox.NETBOX_SOURCE['name']
+_DEVICES_COLUMN = 'device'
+_IFACES_COLUMN = 'interface'
+_IGP_COLUMN = 'igp'
+_BGP_COLUMN = 'bgp'
 
 # Supported vyos if types
 _VYOS_VLAN  = "^(eth|bond)([0-9]{1,3})(\.)([0-9]{1,4})$"
@@ -199,7 +203,11 @@ class NetboxUtility:
 
             return providers
     
-        out = {}
+        out = {
+                'datasource' : _DATASOURCE,
+                'weight'     : netbox.NETBOX_SOURCE['weight'],
+            }
+
         if ret['data']:
             for device in ret['data']['device_list']:
                 if ( device['site']['status'].lower() not in ['active', 'staging', 'decommissioning']
@@ -212,8 +220,7 @@ class NetboxUtility:
                         'location'   : device['site']['region']['slug'],
                         'roles'      : _gen_roles(device),
                         'providers'  : _gen_providers(device),
-                        'datasource' : _DATASOURCE,
-                        'weight'     : netbox.NETBOX_SOURCE['weight'],
+                        'node_name'  : device['name'],
                         }
 
                 meta = {
@@ -235,6 +242,8 @@ class NetboxUtility:
                         }
                 entry['cvars'] = { k : v for k, v in cvars.items() if v }
                 out[ device['name'] ] = { k : v for k, v in entry.items() if v }
+        else:
+            return None
 
         return out
 
@@ -242,7 +251,11 @@ class NetboxUtility:
     def generate_interfaces(self):
         ret = self.nb_api.gql(netbox.IFACE_GQL)
 
-        out = {}
+        out = {
+                'datasource' : _DATASOURCE,
+                'weight'     : netbox.NETBOX_SOURCE['weight'],
+            }
+
         if ret['data']:
             interfaces  = ret['data'].get('interface_list')
             fw_contexts = ret['data'].get('config_context_list')
@@ -272,8 +285,6 @@ class NetboxUtility:
                         'meta'        : meta,
                         'mtu'         : interface['mtu'],
                         'description' : interface['description'],
-                        'datasource'  : _DATASOURCE,
-                        'weight'      : netbox.NETBOX_SOURCE['weight'],
                         }
 
                 if not interface['enabled']:
@@ -418,6 +429,8 @@ class NetboxUtility:
                     out[device] = {}
 
                 out[device][name] = { k : v for k, v in entry.items() if v }
+        else:
+            return None
 
         return out
 
@@ -425,7 +438,11 @@ class NetboxUtility:
     def generate_igp(self):
         ret = self.nb_api.gql(netbox.IGP_GQL)
 
-        out = {}
+        out = {
+                'datasource' : _DATASOURCE,
+                'weight'     : netbox.NETBOX_SOURCE['weight'],
+            }
+
         if ret['data']:
             devices  = ret['data'].get('devices')
             contexts = ret['data'].get('contexts')
@@ -434,8 +451,6 @@ class NetboxUtility:
                 name = device['name']
 
                 entry = {
-                        'weight'     : netbox.NETBOX_SOURCE['weight'],
-                        'datasource' : _DATASOURCE,
                         'meta'       : {}
                         }
 
@@ -476,6 +491,8 @@ class NetboxUtility:
                 entry.update(isis)
 
                 out[name] = { 'isis': entry }
+        else:
+            return None
 
         return out
 
@@ -483,7 +500,11 @@ class NetboxUtility:
     def generate_ebgp(self):
         ret = self.nb_api.gql(netbox.EBGP_GQL)
 
-        out = {}
+        out = {
+                'datasource' : _DATASOURCE,
+                'weight'     : netbox.NETBOX_SOURCE['weight'],
+            }
+
         if ret['data']:
             devices = ret['data'].get('devices')
 
@@ -544,14 +565,14 @@ class NetboxUtility:
 
                         neighbor = {
                                 'peer_group' : peer_group,
-                                'datasource' : _DATASOURCE,
-                                'weight'     : netbox.NETBOX_SOURCE['weight'],
                                 }
                         neighbors[ str(ip['address']).split('/')[0] ] = neighbor
 
                 if neighbors:
                     out[device_name] = {}
                     out[device_name]['neighbors'] = neighbors
+        else:
+            return None
 
         return out
 
@@ -562,10 +583,22 @@ class NetboxUtility:
         return synchronizers.devices(_DATASOURCE, netbox_dev, self.test)
 
 
+    def reload_devices(self):
+        data = self.generate_devices()
+
+        return netdb.reload(_DEVICES_COLUMN, data)
+
+
     def synchronize_interfaces(self):
         netbox_ifaces = self.generate_interfaces()
 
         return synchronizers.interfaces(_DATASOURCE, netbox_ifaces, self.test)
+
+
+    def reload_interfaces(self):
+        data = self.generate_interfaces()
+
+        return netdb.reload(_IFACES_COLUMN, data)
 
 
     def synchronize_igp(self):
@@ -574,7 +607,19 @@ class NetboxUtility:
         return synchronizers.igp(_DATASOURCE, netbox_igp, self.test)
 
 
+    def reload_igp(self):
+        data = self.generate_igp()
+
+        return netdb.reload(_IGP_COLUMN, data)
+
+
     def synchronize_ebgp(self):
         netbox_ebgp = self.generate_ebgp()
 
         return synchronizers.bgp_sessions(_DATASOURCE, netbox_ebgp, self.test)
+
+
+    def reload_ebgp(self):
+        data = self.generate_ebgp()
+
+        return netdb.reload(_BGP_COLUMN, data)

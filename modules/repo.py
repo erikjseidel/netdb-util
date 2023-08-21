@@ -52,7 +52,7 @@ class RepoUtility:
             filename = template['name']
 
             try:
-                rendered = template['data'].render(node=node, device=self.devices[node], devices=self.devices)
+                rendered = template['data'].render(device=self.devices[node], devices=self.devices)
             except Exception as e:
                 raise WebAPIException(message=f'Jinja2 rendering exception for {filename}: {e.message}')
 
@@ -108,14 +108,4 @@ class RepoUtility:
 
 
     def reload_column(self, column):
-        data = self.generate_column(column)
-        if not data:
-            # Don't reload an empty set
-            return None
-
-        try:
-            netdb.reload(column, data)
-        except netdb.NetdbException as e:
-            raise WebAPIException(data=e.data, message=e.message)
-
-        return data
+        return netdb.reload(column, self.generate_column(column))
