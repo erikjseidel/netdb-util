@@ -430,7 +430,7 @@ class PeeringManagerUtility:
 
 
     def generate_ixp_session_base(self, session):
-        if ( status := session['status'].get('value') ) == 'disabled':
+        if ( status := session['status']['value'] ) == 'disabled':
             return None
 
         # Turn these into `id' keyed dicts for quick lookups. 
@@ -447,10 +447,10 @@ class PeeringManagerUtility:
         ixp_id = connection['internet_exchange_point']['id']
         ixp = ixps.get(ixp_id)
 
-        if 'disabled' in [ connection['status'], ixp['status'] ]:
+        if 'disabled' in [ connection['status']['value'], ixp['status']['value'] ]:
             return None
 
-        if 'maintenance' in [ session['status'], connection['status'], ixp['status'] ]:
+        if 'maintenance' in [ session['status']['value'], connection['status']['value'], ixp['status']['value'] ]:
             status = 'maintenance'
 
         tags = [ i['name'] for i in (session['tags'] + connection['tags'] + ixp['tags']) ]
@@ -684,7 +684,7 @@ class PeeringManagerUtility:
             self.pm_api.set('direct-sessions').set_id(session_id)
 
         # No direct sessions found; try IXP session
-        elif session_id := search_ixp_sessions(device, ip):
+        elif session_id := self.search_ixp_sessions(device, ip):
             self.pm_api.set('ixp-sessions').set_id(session_id)
 
         # No sessions found.
