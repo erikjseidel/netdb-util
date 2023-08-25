@@ -661,9 +661,6 @@ class PeeringManagerUtility:
         if not (pm_session := self.generate_session(device, ip)):
             raise PMException(message=f'Neighbor not found!')
 
-        pm_session[device]['neighbors'][ip]['datasource'] = pm_session.pop('datasource')
-        pm_session[device]['neighbors'][ip]['weight'] = pm_session.pop('weight')
-
         return netdb.replace(_BGP_COLUMN, pm_session)
 
 
