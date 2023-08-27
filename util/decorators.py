@@ -61,9 +61,8 @@ def restful_method(methods=['GET']):
 
             else:
                 ret = { 
-                        'result'  : result, 
+                        'result'  : False, 
                         'error'   : False,
-                        'comment' : comment,
                         }
 
                 try:
@@ -72,13 +71,19 @@ def restful_method(methods=['GET']):
                     assert isinstance(result, bool)
                     assert (out == None) or isinstance(out, dict), isinstance(comment, str)
 
+                    ret.update({
+                        'result'  : result,
+                        'comment' : comment,
+                        })
+
                 except Exception as e:
                     if not issubclass(e, WebAPIException):
                         raise e
 
-                    ret['result'] = False
-
                     status = e.code
+
+                    if e.message:
+                        ret['comment'] = e.message
 
                     if status in range(500, 600):
                         logger.error(f'Exception occured: {e.message}', exc_info=e)
