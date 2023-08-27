@@ -49,12 +49,21 @@ class NetboxAPI(DjangoAPI):
     def call_script(self, data):
         url = self.url
         logger.debug(f'NetboxAPI.call_script: {url}')
-        resp = requests.post(url, headers = self._HEADERS, json = data )
+        resp = requests.post(url, headers=self._HEADERS, json=data)
 
-        if 'results' in ( js := resp.json() ):
-            return js['results']
+        if resp.status_code in range(500, 600):
+            # It's really borked. Don't even try to extract and return json.
+            raise NetboxException(url=url, code=resp.status_code, message=resp.reason)
 
-        return js['result'] if 'result' in js else js
+        data = resp.json()
+
+        if resp.status_code != 200:
+            raise NetboxException(url, data, resp.status_code)
+
+        if ret := data.get('results'):
+            return data
+
+        return ( data.get('result') or data )
 
 
     def gql(self, query):
@@ -62,8 +71,11 @@ class NetboxAPI(DjangoAPI):
         resp = requests.post(url, headers=self._HEADERS, json={"query": query})
         logger.debug(f'Netbox.gql: {url} {query}')
 
-        if (code := resp.status_code) != 200:
-            raise NetboxException(url, resp.json(), code)
+        if resp.status_code in range(500, 600):
+            raise NetboxException(url=url, code=resp.status_code, message=resp.reason)
+
+        if resp.status_code != 200:
+            raise NetboxException(url, resp.json(), resp.status_code)
 
         return resp.json()
 
@@ -355,12 +367,12 @@ class NetboxUtility:
 
                     if not interface['untagged_vlan']:
                         raise NetboxException(
-                                message = '%s %s: untagged VLAN ID is required' % (device, name)
+                                message=f'{device} {name}: untagged VLAN ID is required'
                                 )
 
                     if not interface['parent']:
                         raise NetboxException(
-                                message = '%s %s: parent interface required' % (device, name) 
+                                message=f'{device} {name}: parent interface required'
                                 )
 
                     vlan =  {
@@ -414,7 +426,7 @@ class NetboxUtility:
                             entry['disabled'] = True
 
                 else:
-                    raise NetboxException( message = '%s: invalid type for %s' % (device, name) )
+                    raise NetboxException( message=f'{device}: invalid type for {name}' )
 
                 # Load firewall rules based on tag join on interfaces and config_contexts.
                 # TBD: Order loads by weight.

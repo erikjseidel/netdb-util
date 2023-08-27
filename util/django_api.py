@@ -94,7 +94,7 @@ class DjangoAPI:
 
     def get(self):
         url = self.url
-        logger.debug(f'PM.get: {url}')
+        logger.debug(f'DjangoAPI.get: {url}')
 
         # In case of get, the instantiation caches queries. Check to see if
         # this  instantiation has already queried and cached. if cached, use
@@ -114,7 +114,7 @@ class DjangoAPI:
 
     def post(self, data=None):
         url = self.url
-        logger.debug(f'PM.get: {url}')
+        logger.debug(f'DjangoAPI.post: {url}')
 
         if data:
             resp = requests.post(url, headers = self._HEADERS, json = data)
@@ -133,7 +133,7 @@ class DjangoAPI:
 
     def patch(self, data):
         url = self.url
-        logger.debug(f'PM.patch: {url}')
+        logger.debug(f'DjangoAPI.patch: {url}')
         resp = requests.patch(url, headers = self._HEADERS, json = data )
 
         out  = resp.json()
@@ -148,7 +148,7 @@ class DjangoAPI:
 
     def delete(self):
         url = self.url
-        logger.debug(f'PM.patch: {url}')
+        logger.debug(f'DjangoAPI.patch: {url}')
         resp = requests.delete(url, headers = self._HEADERS)
 
         code = resp.status_code

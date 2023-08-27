@@ -53,35 +53,44 @@ def restful_method(methods=['GET']):
 
             method = kwargs.get('method')
 
+            status = 200
+
             if method not in methods:
                 ret = { 'result': False, 'error': True, 'comment': 'Invalid method' }
                 status = 404
 
             else:
+                ret = { 
+                        'result'  : result, 
+                        'error'   : False,
+                        'comment' : comment,
+                        }
+
                 try:
                     result, out, comment = func(*args, **kwargs)
 
                     assert isinstance(result, bool)
                     assert (out == None) or isinstance(out, dict), isinstance(comment, str)
 
-                    ret = { 'result': result, 'error': False, 'comment': comment }
+                except Exception as e:
+                    if not issubclass(e, WebAPIException):
+                        raise e
 
-                    if out: ret.update({ 'out': out })
+                    ret['result'] = False
 
-                except DjangoException as e:
-                    logger.error(f'Exception occured: {e.message}', exc_info=e)
+                    status = e.code
+
+                    if status in range(500, 600):
+                        logger.error(f'Exception occured: {e.message}', exc_info=e)
+                        ret['error'] = True
+
                     out = e.data
-                    ret = { 'result': False, 'error': True, 'comment': e.message }
 
-                except (PMException, NetboxException, RipeStatException, WebAPIException) as e:
-                    out = e.data
-                    ret = { 'result': False, 'error': False, 'comment': e.message }
+                finally:
+                    if out:
+                        ret['out'] = out
 
-                if out:
-                    ret.update({'out': out})
-
-
-            return Response(response = json.dumps(ret), status = 200, mimetype = 'application/json')
+            return Response(response=json.dumps(ret), status=status, mimetype='application/json')
         return wrapped
 
     # allow decorator to be used without calling it (e.g. when no paramators required).
