@@ -7,12 +7,22 @@ from util import netdb
 from util.django_api import DjangoAPI
 from util.web_api import WebAPIException
 
-from pprint import pprint
-
 _DATASOURCE = pm.PM_SOURCE['name']
 _BGP_COLUMN = 'bgp'
 
+NETDB_CONTAINER = {
+        'datasource' : _DATASOURCE,
+        'weight'     : pm.PM_SOURCE['weight'],
+        }
+
 logger = logging.getLogger(__name__)
+
+def _container(data):
+    return {
+            'column' : data,
+            **NETDB_CONTAINER
+            }
+
 
 class PeeringManagerAPI(DjangoAPI):
     """
@@ -541,10 +551,7 @@ class PeeringManagerUtility:
     def generate_direct_sessions(self):
         sessions = self.pm_api.set('direct-sessions').get()
 
-        out = {
-                'datasource' : _DATASOURCE,
-                'weight'     : pm.PM_SOURCE['weight'],
-                }
+        out = {}
 
         if sessions:
             for session in sessions:
@@ -564,10 +571,7 @@ class PeeringManagerUtility:
     def generate_direct_session(self, id):
         session = self.pm_api.set('direct-sessions').set_id(id).get()
 
-        out = {
-                'datasource' : _DATASOURCE,
-                'weight'     : pm.PM_SOURCE['weight'],
-                }
+        out = {}
 
         if session.get('id'):
             result = self.generate_direct_session_base(session)
@@ -585,10 +589,7 @@ class PeeringManagerUtility:
     def generate_ixp_sessions(self):
         sessions = self.pm_api.set('ixp-sessions').get()
 
-        out = {
-                'datasource' : _DATASOURCE,
-                'weight'     : pm.PM_SOURCE['weight'],
-                }
+        out = {}
 
         if sessions:
             for session in sessions:
@@ -608,10 +609,7 @@ class PeeringManagerUtility:
     def generate_ixp_session(self, id):
         session = self.pm_api.set('ixp-sessions').set_id(id).get()
 
-        out = {
-                'datasource' : _DATASOURCE,
-                'weight'     : pm.PM_SOURCE['weight'],
-                }
+        out = {}
 
         if session.get('id'):
             result = self.generate_ixp_session_base(session)
@@ -646,9 +644,6 @@ class PeeringManagerUtility:
      
         # Pull direct sessions and merge them on top of IXP sessions.
         for device, neighbors in self.generate_direct_sessions().items():
-            if device in ['datasource', 'weight']:
-                continue
-
             if not pm_sessions.get(device):
                 pm_sessions[device] = { 'neighbors' : {} }
             for neighbor, bgp_data in neighbors.get('neighbors').items():
@@ -661,13 +656,13 @@ class PeeringManagerUtility:
         if not (pm_session := self.generate_session(device, ip)):
             raise PMException(message=f'Neighbor not found!')
 
-        return netdb.replace(_BGP_COLUMN, pm_session)
+        return netdb.replace(_BGP_COLUMN, _container(pm_session))
 
 
     def reload_ebgp(self):
         data = self.generate_ebgp()
 
-        return netdb.reload(_BGP_COLUMN, data)
+        return netdb.reload(_BGP_COLUMN, _container(data))
 
 
     def set_status(self, device, ip, status):

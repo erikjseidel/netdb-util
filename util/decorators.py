@@ -60,6 +60,7 @@ def restful_method(methods=['GET']):
                 status = 404
 
             else:
+                out = None
                 ret = { 
                         'result'  : False, 
                         'error'   : False,
@@ -77,7 +78,7 @@ def restful_method(methods=['GET']):
                         })
 
                 except Exception as e:
-                    if not issubclass(e, WebAPIException):
+                    if not issubclass(e.__class__, WebAPIException):
                         raise e
 
                     status = e.code
