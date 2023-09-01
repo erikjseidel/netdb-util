@@ -11,6 +11,11 @@ _IFACES_COLUMN = 'interface'
 _IGP_COLUMN = 'igp'
 _BGP_COLUMN = 'bgp'
 
+NETDB_CONTAINER = {
+        'datasource' : _DATASOURCE,
+        'weight'     : netbox.NETBOX_SOURCE['weight'],
+        }
+
 # Supported vyos if types
 _VYOS_VLAN  = "^(eth|bond)([0-9]{1,3})(\.)([0-9]{1,4})$"
 _VYOS_ETH   = "^(eth)([0-9]{1,3})$"
@@ -31,6 +36,13 @@ _TYPE_DICT = {
 _VYOS_PARENT  = "^(eth|bond)([0-9]{1,3})(?:(\.)([0-9]{1,4})){0,1}$"
 
 logger = logging.getLogger(__name__)
+
+def _container(data):
+    return {
+            'column' : data,
+            **NETDB_CONTAINER
+            }
+
 
 class NetboxAPI(DjangoAPI):
     """
@@ -58,7 +70,7 @@ class NetboxAPI(DjangoAPI):
         data = resp.json()
 
         if resp.status_code != 200:
-            raise NetboxException(url, data, resp.status_code)
+            raise NetboxException(url=url, code=resp.status_code, data=data)
 
         if ret := data.get('results'):
             return data
@@ -75,7 +87,7 @@ class NetboxAPI(DjangoAPI):
             raise NetboxException(url=url, code=resp.status_code, message=resp.reason)
 
         if resp.status_code != 200:
-            raise NetboxException(url, resp.json(), resp.status_code)
+            raise NetboxException(url=url, code=resp.status_code, data=resp.json())
 
         return resp.json()
 
@@ -215,10 +227,7 @@ class NetboxUtility:
 
             return providers
     
-        out = {
-                'datasource' : _DATASOURCE,
-                'weight'     : netbox.NETBOX_SOURCE['weight'],
-            }
+        out = {}
 
         if ret['data']:
             for device in ret['data']['device_list']:
@@ -263,10 +272,7 @@ class NetboxUtility:
     def generate_interfaces(self):
         ret = self.nb_api.gql(netbox.IFACE_GQL)
 
-        out = {
-                'datasource' : _DATASOURCE,
-                'weight'     : netbox.NETBOX_SOURCE['weight'],
-            }
+        out = {}
 
         if ret['data']:
             interfaces  = ret['data'].get('interface_list')
@@ -450,10 +456,7 @@ class NetboxUtility:
     def generate_igp(self):
         ret = self.nb_api.gql(netbox.IGP_GQL)
 
-        out = {
-                'datasource' : _DATASOURCE,
-                'weight'     : netbox.NETBOX_SOURCE['weight'],
-            }
+        out = {}
 
         if ret['data']:
             devices  = ret['data'].get('devices')
@@ -512,10 +515,7 @@ class NetboxUtility:
     def generate_ebgp(self):
         ret = self.nb_api.gql(netbox.EBGP_GQL)
 
-        out = {
-                'datasource' : _DATASOURCE,
-                'weight'     : netbox.NETBOX_SOURCE['weight'],
-            }
+        out = {}
 
         if ret['data']:
             devices = ret['data'].get('devices')
@@ -588,26 +588,25 @@ class NetboxUtility:
 
         return out
 
-
     def reload_devices(self):
         data = self.generate_devices()
 
-        return netdb.reload(_DEVICES_COLUMN, data)
+        return netdb.reload(_DEVICES_COLUMN, _container(data))
 
 
     def reload_interfaces(self):
         data = self.generate_interfaces()
 
-        return netdb.reload(_IFACES_COLUMN, data)
+        return netdb.reload(_IFACES_COLUMN, _container(data))
 
 
     def reload_igp(self):
         data = self.generate_igp()
 
-        return netdb.reload(_IGP_COLUMN, data)
+        return netdb.reload(_IGP_COLUMN, _container(data))
 
 
     def reload_ebgp(self):
         data = self.generate_ebgp()
 
-        return netdb.reload(_BGP_COLUMN, data)
+        return netdb.reload(_BGP_COLUMN, _container(data))

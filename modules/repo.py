@@ -8,7 +8,18 @@ from config.repo_yaml import REPO_BASE, REPO_SOURCE
 
 _NETDB_DEV_COLUMN = 'device'
 
+NETDB_CONTAINER = {
+        'datasource' : REPO_SOURCE['name'],
+        'weight'     : REPO_SOURCE['weight'],
+        }
+
 logger = logging.getLogger(__name__)
+
+def _container(data):
+    return {
+            'column' : data,
+            **NETDB_CONTAINER
+            }
 
 class RepoUtility:
 
@@ -25,9 +36,12 @@ class RepoUtility:
         if not isinstance(self.top, dict) or 'base' not in self.top.keys():
             raise WebAPIException(message=f'base not found in top file {path}')
 
-        result, self.devices, message = netdb.get(_NETDB_DEV_COLUMN)
-        if not result:
+        ret = netdb.get(_NETDB_DEV_COLUMN)
+
+        if not ret['result']:
             raise WebAPIException(message=f'netdb device get failure: {message}')
+
+        self.devices = ret['out']
 
 
     def _load_templates(self, filenames):
@@ -69,10 +83,7 @@ class RepoUtility:
 
 
     def generate_column(self, column):
-        out = {
-                'datasource' : REPO_SOURCE['name'],
-                'weight'     : REPO_SOURCE['weight'],
-                }
+        out = {}
 
         if not (directory := self.top['base'].get(column)):
             raise WebAPIException(message=f'column {column} not found in base')
@@ -110,4 +121,6 @@ class RepoUtility:
 
 
     def reload_column(self, column):
-        return netdb.reload(column, self.generate_column(column))
+        data = self.generate_column(column)
+
+        return netdb.reload(column, _container(data))
