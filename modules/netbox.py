@@ -3,7 +3,7 @@ from copy import deepcopy
 from config import netbox
 from util import netdb
 from util.django_api import DjangoAPI
-from util.web_api import WebAPIException
+from util.exception import UtilityAPIException
 
 _DATASOURCE = netbox.NETBOX_SOURCE['name']
 _DEVICES_COLUMN = 'device'
@@ -42,6 +42,10 @@ def _container(data):
             'column' : data,
             **NETDB_CONTAINER
             }
+
+
+class NetboxException(UtilityAPIException):
+    pass
 
 
 class NetboxAPI(DjangoAPI):
@@ -92,10 +96,6 @@ class NetboxAPI(DjangoAPI):
         return resp.json()
 
 
-class NetboxException(WebAPIException):
-    pass
-
-
 class NetboxUtility:
 
     def __init__(self, test=False):
@@ -140,18 +140,17 @@ class NetboxUtility:
                 break
 
             elif status == 'errored':
-                out = {
-                        'result'  : False,
-                        'comment' : 'Netbox script encountered a runtime error',
-                        'out'     : {
+                raise NetboxException(
+                        code=400,
+                        message='Netbox script encountered a runtime error',
+                        data={
                             script : {
                                 'jid'    : ret.get('job_id'),
                                 'status' : status,
                                 'url'    : url,
                                 }
-                            }
-                        }
-                break
+                            },
+                        )
 
             time_bank -= step
 
