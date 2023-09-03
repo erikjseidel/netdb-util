@@ -5,6 +5,7 @@ from copy import deepcopy
 from jinja2 import Environment, FileSystemLoader
 from util import netdb
 from config.repo_yaml import REPO_BASE, REPO_SOURCE
+from util.exception import UtilityAPIException
 
 _NETDB_DEV_COLUMN = 'device'
 
@@ -21,6 +22,11 @@ def _container(data):
             **NETDB_CONTAINER
             }
 
+
+class RepoException(UtilityAPIException):
+    pass
+
+
 class RepoUtility:
 
     def __init__(self):
@@ -29,17 +35,17 @@ class RepoUtility:
         try:
             self.top = yaml.safe_load(Path(path).read_text())
         except FileNotFoundError:
-            raise WebAPIException(message=f'Repo top file {path} not found')
+            raise RepoException(code=404, message=f'Repo top file {path} not found')
         except:
-            raise WebAPIException(message=f'Repo top file {path} load error')
+            raise RepoException(code=422, message=f'Repo top file {path} load error')
 
         if not isinstance(self.top, dict) or 'base' not in self.top.keys():
-            raise WebAPIException(message=f'base not found in top file {path}')
+            raise RepoException(code=404, message=f'base not found in top file {path}')
 
         ret = netdb.get(_NETDB_DEV_COLUMN)
 
         if not ret['result']:
-            raise WebAPIException(message=f'netdb device get failure: {message}')
+            raise RepoException(code=404, message=f'netdb device get failure: {message}')
 
         self.devices = ret['out']
 
@@ -56,7 +62,7 @@ class RepoUtility:
                      'data' : environment.get_template(f'{filename}.yaml'),
                     })
             except Exception as e:
-                raise WebAPIException(message=f'Jinja2 load exception for {filename}.yaml: {e.message}')
+                raise RepoException(code=500, message=f'Jinja2 load exception for {filename}.yaml: {e.message}')
 
         return out
 
@@ -70,12 +76,12 @@ class RepoUtility:
             try:
                 rendered = template['data'].render(device=self.devices[node], devices=self.devices)
             except Exception as e:
-                raise WebAPIException(message=f'Jinja2 rendering exception for {filename}: {e.message}')
+                raise RepoException(code=500, message=f'Jinja2 rendering exception for {filename}: {e.message}')
 
             try:
                 in_data = yaml.safe_load(rendered)
             except Exception as e:
-                raise WebAPIException(message=f'YAML load exception for {filename}: Invalid YAML data')
+                raise RepoException(code=422, message=f'YAML load exception for {filename}: Invalid YAML data')
 
             out.update(in_data)
 
@@ -86,7 +92,7 @@ class RepoUtility:
         out = {}
 
         if not (directory := self.top['base'].get(column)):
-            raise WebAPIException(message=f'column {column} not found in base')
+            raise RepoException(code=404, message=f'column {column} not found in base')
 
         node_sets = self.top.get('node_sets', {})
 

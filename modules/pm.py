@@ -5,7 +5,7 @@ from config import pm
 from schema import pm as pm_schema
 from util import netdb
 from util.django_api import DjangoAPI
-from util.web_api import WebAPIException
+from util.exception import UtilityAPIException
 
 _DATASOURCE = pm.PM_SOURCE['name']
 _BGP_COLUMN = 'bgp'
@@ -22,6 +22,10 @@ def _container(data):
             'column' : data,
             **NETDB_CONTAINER
             }
+
+
+class PMException(UtilityAPIException):
+    pass
 
 
 class PeeringManagerAPI(DjangoAPI):
@@ -48,10 +52,6 @@ class PeeringManagerAPI(DjangoAPI):
         'connections'     : 'net/connections',
         'relationships'   : 'bgp/relationships',
         }
-
-
-class PMException(WebAPIException):
-    pass
 
 
 class PeeringManagerUtility:
@@ -173,21 +173,19 @@ class PeeringManagerUtility:
         try:
             policy = pm_schema.PolicySchema().load(data_in)
         except ValidationError as error:
-            return False, error.messages, 'invalid policy data'
+            raise PMException(code=422, data=error.messages, comment='invalid policy data')
 
-        ret = self.pm_api.set('policies').post(policy)
-
-        return True, ret, 'Policy created'
+        return self.pm_api.set('policies').post(policy)
 
 
     def delete_policy(self, name):
         id = self.search_policies(name)
         if not id:
-            return False, None, 'Policy not found in Peering Manager'
+            raise PMException(code=422, message='Policy not found in Peering Manager')
 
         self.pm_api.set('policies').set_id(id).delete()
 
-        return True, None, 'Policy deleted'
+        return True
 
 
     def generate_policies(self, pm_object, policies, family):
@@ -216,34 +214,32 @@ class PeeringManagerUtility:
 
         try:
             asn = pm_schema.AsnSchema().load(data_in)
-        except ValidationError as error:
-            return False, error.messages, 'invalid ASN data'
+        except ValidationError as e:
+            raise PMException(code=422, data=e.messages, message='invalid ASN data')
 
-        ret = self.pm_api.set('asns').post(asn)
-
-        return True, ret, 'ASN created'
+        return self.pm_api.set('asns').post(asn)
 
 
     def peeringdb_asn_sync(self, name):
 
         id = self.search_asns(name)
         if not id:
-            return False, None, 'ASN not found in Peering Manager'
+            raise PMException(code=404, message='ASN not found in Peering Manager')
 
         self.pm_api.set('asns').set_id(id).set_suffix('sync-with-peeringdb').post()
 
-        return True, None, 'ASN synchronized from peeringdb'
+        return True
         
 
     def delete_asn(self, name):
 
         id = self.search_asns(name)
         if not id:
-            return False, None, 'ASN not found in Peering Manager'
+            raise PMException(code=404, message='ASN not found in Peering Manager')
 
         self.pm_api.set('asns').set_id(id).delete()
 
-        return True, None, 'ASN deleted'
+        return True
 
 
     def create_direct_session(self, data):
@@ -251,18 +247,18 @@ class PeeringManagerUtility:
         # Check that all incoming keys are valid options.
         for k in data.keys():
             if k not in pm_schema.ADD_DIRECT_SESSION_MASK:
-                return False, None, f'{k}: invalid key'
+                raise PMException(code=422, message=f'{k}: invalid key')
 
         # PM will allow addition of multiple sessions with the same device
         # and remote IP. Prevent this from happening via netb-util calls.
         device = data.get('device')
         remote_ip = data.get('remote_ip')
         if self.search_direct_sessions(device, remote_ip):
-            return False, None, f'{remote_ip} at {device}: session already exists'
+            raise PMException(code=422, message=f'{remote_ip} at {device}: session already exists')
 
         if status := data.get('status'):
             if status not in pm_schema.PM_STATUS:
-                return False, None, 'Invalid session status'
+                raise PMException(code=422, message='Invalid session status')
 
         data_in = self._resolve_relationships(data)
 
@@ -272,13 +268,11 @@ class PeeringManagerUtility:
         try:
             session = pm_schema.DirectSessionSchema().load(data_in)
         except ValidationError as error:
-            return False, error.messages, 'invalid session data'
+            raise PMException(code=422, data=error.messages, message='invalid session data')
 
-        ret = self.pm_api.set('direct-sessions').post(session)
+        self.pm_api.set('direct-sessions').post(session)
 
-        out = self.reload_session(device, remote_ip)
-
-        return True, out, 'Direct session created in Peering Manager'
+        return self.reload_session(device, remote_ip)
 
 
     def update_direct_session(self, data):
@@ -286,12 +280,12 @@ class PeeringManagerUtility:
         # Check that all incoming keys are valid options.
         for k in data.keys():
             if k not in pm_schema.UPDATE_DIRECT_SESSION_MASK:
-                return False, None, f'{k}: invalid key'
+                raise PMException(code=422, message=f'{k}: invalid key')
 
         device = data.pop('device', None)
         remote_ip = data.pop('remote_ip', None)
         if not ( id := self.search_direct_sessions(device, remote_ip) ):
-            return False, None, f'{remote_ip} at {device}: session not found'
+            raise PMException(code=404, message=f'{remote_ip} at {device}: session not found')
 
         data_in = self._resolve_relationships(data)
 
@@ -301,19 +295,17 @@ class PeeringManagerUtility:
         try:
             session = pm_schema.DirectSessionSchema().load(data_in)
         except ValidationError as error:
-            return False, error.messages, 'invalid session data'
+            raise PMException(code=422, data=error.messages, message='invalid session data')
 
-        ret = self.pm_api.set('direct-sessions').set_id(id).patch(session)
+        self.pm_api.set('direct-sessions').set_id(id).patch(session)
 
-        out = self.reload_session(device, remote_ip)
-
-        return True, out, 'Direct session updated in Peering Manager'
+        return self.reload_session(device, remote_ip)
 
 
     def delete_direct_session(self, device, ip):
 
         if not ( id := self.search_direct_sessions(device, ip) ):
-            return False, None, 'Direct session not found in Peering Manager'
+            raise PMException(code=404, message='Direct session not found in Peering Manager')
 
         self.pm_api.set('direct-sessions').set_id(id).delete()
 
@@ -321,7 +313,7 @@ class PeeringManagerUtility:
 
         netdb.delete(_BGP_COLUMN, filt)
 
-        return result, None, 'Direct session deleted in Peering Manager'
+        return True
 
 
     def generate_direct_session_base(self, session):
@@ -654,7 +646,7 @@ class PeeringManagerUtility:
 
     def reload_session(self, device, ip):
         if not (pm_session := self.generate_session(device, ip)):
-            raise PMException(message=f'Neighbor not found!')
+            raise PMException(code=404, message=f'PM eBGP session not found.')
 
         return netdb.replace(_BGP_COLUMN, _container(pm_session))
 
@@ -667,7 +659,7 @@ class PeeringManagerUtility:
 
     def set_status(self, device, ip, status):
         if status not in pm_schema.PM_STATUS:
-            return False, None, 'invalid session status'
+            raise PMException(code=422, message=f'Invalid session status.')
 
         data = { 'status': status }
 
@@ -681,13 +673,13 @@ class PeeringManagerUtility:
 
         # No sessions found.
         else:
-            return False, None, 'PM eBGP session not found.'
+            raise PMException(code=404, message=f'PM eBGP session not found.')
 
         session = self.pm_api.get()
         if session['status'].get('value') == status:
-            return False, None, 'Status not changed'
+            raise PMException(code=200, message=f'Status not changed.')
 
         self.pm_api.patch(data)
 
         # Reload netdb entry and return
-        return True, self.reload_session(device, ip), 'Status updated.'
+        return self.reload_session(device, ip)
