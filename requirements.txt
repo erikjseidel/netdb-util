@@ -1,0 +1,9 @@
+fastapi==0.102.0
+gunicorn==20.1.0
+uvicorn==0.23.2
+pymongo==4.3.3
+netaddr>=0.8.0
+marshmallow>=3.19.0
+requests>=2.25.1
+yamlordereddictloader>=0.4.0
+Jinja2>=3.1.2

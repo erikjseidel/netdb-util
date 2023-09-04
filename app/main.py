@@ -23,7 +23,7 @@ from util.api_resources import (
         )
 
 app = FastAPI(
-        title="NetDB API Version 2",
+        title="NetDB Util API Version 2",
         description=resources.description,
         openapi_tags=resources.tags,
         )
