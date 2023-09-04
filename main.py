@@ -1,17 +1,19 @@
 import util.api_resources as resources
 
-from typing import Optional
+from typing import Optional, Union
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError, HTTPException
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, IPvAnyAddress
+from pydantic import BaseModel, IPvAnyAddress, IPvAnyNetwork
 from util.exception import UtilityAPIException
 
 from modules.netbox import NetboxUtility
 from modules.pm import PeeringManagerUtility
 from modules.repo import RepoUtility
+from modules.cfdns import CloudflareDNSConnector
+from modules.ripe import RipeStatUtility
 
 from util.api_resources import (
         UtilityAPIReturn,
@@ -32,6 +34,10 @@ CONNECTORS = '/connectors'
 PM_CONNECTOR = f'{CONNECTORS}/pm/'
 REPO_CONNECTOR = f'{CONNECTORS}/repo/'
 NETBOX_CONNECTOR = f'{CONNECTORS}/netbox/'
+CFDNS_CONNECTOR = f'{CONNECTORS}/cfdns/'
+
+UTILITY = '/utility'
+RIPE_UTILITY = f'{UTILITY}/ripe/'
 
 
 # List of available netbox script endpoints mapped to netbox script names.
@@ -487,4 +493,134 @@ def repo_yaml_reload(column: str, response: Response):
     return UtilityAPIReturn(
             out=RepoUtility().reload_column(column),
             comment='Column data reloaded into netdb',
+            )
+
+
+#-----------------------------------------------------------------------------------
+#
+#   Cloudflare Managed DNS (PTR zones) connector entry points
+#
+#-----------------------------------------------------------------------------------
+
+
+@app.get(
+        CFDNS_CONNECTOR + 'records',
+        tags=['cfdns'],
+        response_class=PrettyJSONResponse,
+        )
+def cfdns_list_records(response: Response):
+
+    return UtilityAPIReturn(
+            out=CloudflareDNSConnector().list_records(),
+            comment='CF managed PTRs',
+            )
+
+
+@app.get(
+        CFDNS_CONNECTOR + 'zones',
+        tags=['cfdns'],
+        response_class=PrettyJSONResponse,
+        )
+def cfdns_list_zones(response: Response):
+
+    return UtilityAPIReturn(
+            out=CloudflareDNSConnector().get_cfzones(),
+            comment='CF managed PTR Zones',
+            )
+
+
+class CFZoneInput(BaseModel):
+    account: str
+    zone: str
+    prefix: IPvAnyNetwork
+    managed: bool = True
+
+
+@app.post(
+        CFDNS_CONNECTOR + 'zones',
+        tags=['cfdns'],
+        response_class=PrettyJSONResponse,
+        )
+def cfdns_upsert_zone(data: CFZoneInput, response: Response):
+
+    count = CloudflareDNSConnector().set_cfzone(
+                account=data.account,
+                zone=data.zone,
+                prefix=data.prefix,
+                managed=data.managed,
+                )
+
+    return UtilityAPIReturn(
+            result=bool(count),
+            comment=f'{count} CF managed PTR Zone upserted.',
+            )
+
+
+@app.delete(
+        CFDNS_CONNECTOR + 'zones',
+        tags=['cfdns'],
+        response_class=PrettyJSONResponse,
+        )
+def cfdns_delete_zones(prefix: IPvAnyNetwork, response: Response):
+
+    CloudflareDNSConnector().delete_cfzone(str(prefix))
+
+    return UtilityAPIReturn(
+            comment=f'CF DNS PTR zone for {prefix} no longer managed',
+            )
+
+
+@app.post(
+        CFDNS_CONNECTOR + 'update',
+        tags=['cfdns'],
+        response_class=PrettyJSONResponse,
+        )
+def cfdns_update_cf(response: Response, test: bool = True):
+
+    comment = 'Update complete. The CF zones and records listed below have been updated.'
+    if test:
+        comment = 'List of CF records requiring synchronisation with netdb'
+
+    return UtilityAPIReturn(
+            out=CloudflareDNSConnector().synchronize(test),
+            comment=comment,
+            )
+
+
+#-----------------------------------------------------------------------------------
+#
+#   Ripe Looking Glass connector entry points
+#
+#-----------------------------------------------------------------------------------
+
+@app.get(
+        RIPE_UTILITY + 'lg',
+        tags=['ripe_utility'],
+        response_class=PrettyJSONResponse,
+        )
+def ripe_bgp_lg(
+        prefix: Union[IPvAnyNetwork, IPvAnyAddress],
+        response: Response,
+        lookback: int = 300
+        ):
+
+    return UtilityAPIReturn(
+            out=RipeStatUtility().looking_glass(str(prefix)),
+            comment=f'RipeStat looking glass result for {prefix}',
+            )
+
+
+@app.get(
+        RIPE_UTILITY + 'paths',
+        tags=['ripe_utility'],
+        response_class=PrettyJSONResponse,
+        )
+def ripe_bgp_paths(
+        prefix: Union[IPvAnyNetwork, IPvAnyAddress],
+        response: Response
+        ):
+
+    return UtilityAPIReturn(
+            out=RipeStatUtility().get_paths(str(prefix)),
+            comment=f'RipeStat LG AS paths for {prefix}',
             )

@@ -1,5 +1,5 @@
 import requests, json, logging
-from util.web_api import WebAPIException
+from util.exception import UtilityAPIException
 from config.secrets import NETDB_URL
 
 HEADERS = {
@@ -22,10 +22,10 @@ def _call_netdb(url, method, data=None, params=None):
     if ret.status_code in [404, 422]:
         answer = ret.json()
 
-        raise WebAPIException(url, ret.status_code, answer.get('out'), answer['comment'])
+        raise UtilityAPIException(url, ret.status_code, answer.get('out'), answer['comment'])
 
     if ret.status_code != 200:
-        raise WebAPIException(url, 503, message='Invalid netdb response: \n{}'.format(ret))
+        raise UtilityAPIException(url, 503, message='Invalid netdb response: \n{}'.format(ret))
 
     return ret.json()
 
