@@ -1,18 +1,23 @@
 import requests, json, logging, yaml, ipaddress
 from marshmallow import ValidationError
 from copy import deepcopy
-from config import pm
 from schema import pm as pm_schema
 from util import netdb
 from util.django_api import DjangoAPI
 from util.exception import UtilityAPIException
+from config.defaults import PM_SOURCE
+from config.secrets import PM_TOKEN, PM_URL, PM_PUBLIC_URL
 
-_DATASOURCE = pm.PM_SOURCE['name']
 _BGP_COLUMN = 'bgp'
 
+PM_HEADERS = {
+            'Content-Type'  : 'application/json',
+            'Authorization' : 'Token ' + PM_TOKEN,
+            }
+
 NETDB_CONTAINER = {
-        'datasource' : _DATASOURCE,
-        'weight'     : pm.PM_SOURCE['weight'],
+        'datasource' : 'peering_manager',
+        'weight'     : 125,
         }
 
 logger = logging.getLogger(__name__)
@@ -20,7 +25,7 @@ logger = logging.getLogger(__name__)
 def _container(data):
     return {
             'column' : data,
-            **NETDB_CONTAINER
+            **PM_SOURCE,
             }
 
 
@@ -32,11 +37,11 @@ class PeeringManagerAPI(DjangoAPI):
     """
     Simple class for interacting with Peering Manager API.
     """
-    _API_BASE = pm.PM_URL + '/api'
+    _API_BASE = PM_URL + '/api'
 
-    _PUBLIC_API_BASE = pm.PM_PUBLIC_URL + '/api'
+    _PUBLIC_API_BASE = PM_PUBLIC_URL + '/api'
 
-    _HEADERS = pm.PM_HEADERS
+    _HEADERS = PM_HEADERS
 
     # Used for exception error messages
     _ERR_MSG = 'PM API returned an error'

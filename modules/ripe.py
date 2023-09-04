@@ -1,9 +1,9 @@
 import requests, json, logging, netaddr
-from util.web_api import WebAPIException
+from util.exception import UtilityAPIException
 
 logger = logging.getLogger(__name__)
 
-class RipeStatException(WebAPIException):
+class RipeStatException(UtilityAPIException):
     pass
 
 

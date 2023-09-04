@@ -1,20 +1,21 @@
 import requests, json, logging, time, yaml, ipaddress, re
 from copy import deepcopy
-from config import netbox
 from util import netdb
 from util.django_api import DjangoAPI
 from util.exception import UtilityAPIException
+from util import netbox_resources as netbox
+from config.defaults import NETBOX_SOURCE
+from config.secrets import NETBOX_TOKEN, NETBOX_URL, NETBOX_PUBLIC_URL
 
-_DATASOURCE = netbox.NETBOX_SOURCE['name']
 _DEVICES_COLUMN = 'device'
 _IFACES_COLUMN = 'interface'
 _IGP_COLUMN = 'igp'
 _BGP_COLUMN = 'bgp'
 
-NETDB_CONTAINER = {
-        'datasource' : _DATASOURCE,
-        'weight'     : netbox.NETBOX_SOURCE['weight'],
-        }
+NETBOX_HEADERS = {
+            'Content-Type'  : 'application/json',
+            'Authorization' : 'Token ' + NETBOX_TOKEN,
+            }
 
 # Supported vyos if types
 _VYOS_VLAN  = "^(eth|bond)([0-9]{1,3})(\.)([0-9]{1,4})$"
@@ -40,7 +41,7 @@ logger = logging.getLogger(__name__)
 def _container(data):
     return {
             'column' : data,
-            **NETDB_CONTAINER
+            **NETBOX_SOURCE,
             }
 
 
@@ -52,13 +53,13 @@ class NetboxAPI(DjangoAPI):
     """
     Simple class for interacting with Netbox API and GQL endpoint.
     """
-    _API_BASE = netbox.NETBOX_URL + '/api'
+    _API_BASE = NETBOX_URL + '/api'
 
-    _PUBLIC_API_BASE = netbox.NETBOX_PUBLIC_URL
+    _PUBLIC_API_BASE = NETBOX_PUBLIC_URL
 
-    _HEADERS = netbox.NETBOX_HEADERS
+    _HEADERS = NETBOX_HEADERS
 
-    _GRAPHQL_BASE = netbox.NETBOX_URL + '/graphql/'
+    _GRAPHQL_BASE = NETBOX_URL + '/graphql/'
 
     _ERR_MSG = 'Netbox API returned an error'
 

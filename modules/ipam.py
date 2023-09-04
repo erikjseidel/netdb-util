@@ -1,19 +1,12 @@
-
-from copy       import deepcopy
-from netaddr    import IPSet
-from ipaddress  import ip_interface, ip_network
-
-from util.decorators import restful_method
-from util.netdb      import netdb_get
-from util.query      import ADDR_PROJECT
-
-# Public symbols
-__all__ = [ 'report', 'chooser' ]
+from copy import deepcopy
+from netaddr import IPSet
+from ipaddress import ip_interface, ip_network
+from util import netdb
+from util.exception import UtilityAPIException
 
 _NETDB_COLUMN = 'interface'
 
-@restful_method
-def report(method, data, params):
+def report():
     """
     Show salt managed IP addresses.
 
@@ -22,19 +15,15 @@ def report(method, data, params):
 
     :param data['device']: Limit report to only the specified device (optional)
     """
-    project = deepcopy(ADDR_PROJECT)
+    data = netdb.get(_NETDB_COLUMN)['out']
 
-    if data and 'device' in data:
-        project['filter'].update({ 'set_id': str(data['device']).upper() })
-
-    result, data, comment = netdb_get(_NETDB_COLUMN, data=project, project=True)
-
-    if not result:
-        return result, None, comment
+    if not data:
+        raise UtilityAPIException(
+                code=404,
+                message='Empty data set returned',
+                )
 
     report_data = {}
-
-    report_text = "Salt managed addresses:\n----------\n"
 
     for device, interfaces in data.items():
         for iface, iface_data in interfaces.items():
@@ -54,26 +43,10 @@ def report(method, data, params):
                     if 'meta' in addr_data:
                         report_data[cidr[0]]['meta'] = deepcopy(addr_data['meta'])
 
-    out = report_data
-
-    iplist = list(report_data.keys())
-
-    for ip in iplist:
-        description = ""
-        if 'description' in report_data[ip]:
-            description = report_data[ip]['description']
-
-        report_text += "{0:30} {1:10} {2:10} {3:40}\n".format(ip + '/' + report_data[ip]['cidr'], report_data[ip]['device'],
-                report_data[ip]['interface'], description)
-
-    comment = report_text
-    result  =  True
-
-    return result, out, comment
+    return report_data
 
 
-@restful_method
-def chooser(method, data, params):
+def chooser(prefix):
     """
     Show available prefixes / free IP space within a given (super)prefix.
     In order for this function to by accurate, all IP a space within the
@@ -81,24 +54,12 @@ def chooser(method, data, params):
 
     :param: data['prefix']: The prefix whose free space is to be returned.
     """
-
-    if 'prefix' in data:
-        prefix = data['prefix']
-    else:
-        return False, None, 'Prefix is required'
-
-    try:
-        network = ip_network(prefix)
-    except:
-        return False, None, 'Invalid prefix'
-
-    result, data, comment = netdb_get(_NETDB_COLUMN, ADDR_PROJECT, project=True)
-
-    if not result or not data:
-        return result, data, comment
+    data = netdb.get(_NETDB_COLUMN)['out']
 
     prefix_list = []
     avail_addr = []
+
+    network = ip_network(prefix)
 
     for device, interfaces in data.items():
         for iface, iface_data in interfaces.items():
@@ -114,7 +75,6 @@ def chooser(method, data, params):
 
     available = IPSet( [str(network)] ) ^ IPSet(prefix_list)
 
-    comment = "Available prefixes:\n-----\n"
     out = {}
     for cidr in available.iter_cidrs():
         prefix = str(cidr)
@@ -126,6 +86,4 @@ def chooser(method, data, params):
                 'end':    end,
                 }
 
-        comment += "%s [%s - %s]\n" % ( prefix, start, end )
-
-    return True, out, comment
+    return out

@@ -1,25 +1,19 @@
 import logging, yaml, json
 from pathlib import Path
-from util.web_api import WebAPIException
 from copy import deepcopy
 from jinja2 import Environment, FileSystemLoader
 from util import netdb
-from config.repo_yaml import REPO_BASE, REPO_SOURCE
 from util.exception import UtilityAPIException
+from config.defaults import REPO_BASE, REPO_SOURCE
 
 _NETDB_DEV_COLUMN = 'device'
-
-NETDB_CONTAINER = {
-        'datasource' : REPO_SOURCE['name'],
-        'weight'     : REPO_SOURCE['weight'],
-        }
 
 logger = logging.getLogger(__name__)
 
 def _container(data):
     return {
             'column' : data,
-            **NETDB_CONTAINER
+            **REPO_SOURCE,
             }
 
 

@@ -1,9 +1,9 @@
 import requests, json, logging, yaml, ipaddress
-from .web_api import WebAPIException
+from .exception import UtilityAPIException
 
 logger = logging.getLogger(__name__)
 
-class DjangoException(WebAPIException):
+class DjangoException(UtilityAPIException):
     pass
 
 

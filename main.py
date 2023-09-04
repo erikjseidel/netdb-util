@@ -14,6 +14,7 @@ from modules.pm import PeeringManagerUtility
 from modules.repo import RepoUtility
 from modules.cfdns import CloudflareDNSConnector
 from modules.ripe import RipeStatUtility
+from modules import ipam
 
 from util.api_resources import (
         UtilityAPIReturn,
@@ -38,6 +39,7 @@ CFDNS_CONNECTOR = f'{CONNECTORS}/cfdns/'
 
 UTILITY = '/utility'
 RIPE_UTILITY = f'{UTILITY}/ripe/'
+IPAM_UTILITY = f'{UTILITY}/ipam/'
 
 
 # List of available netbox script endpoints mapped to netbox script names.
@@ -589,7 +591,7 @@ def cfdns_update_cf(response: Response, test: bool = True):
 
 #-----------------------------------------------------------------------------------
 #
-#   Ripe Looking Glass connector entry points
+#   Ripe Looking Glass utility entry points
 #
 #-----------------------------------------------------------------------------------
 
@@ -623,4 +625,36 @@ def ripe_bgp_paths(
     return UtilityAPIReturn(
             out=RipeStatUtility().get_paths(str(prefix)),
             comment=f'RipeStat LG AS paths for {prefix}',
+            )
+
+
+#-----------------------------------------------------------------------------------
+#
+#   IPAM utility entry points
+#
+#-----------------------------------------------------------------------------------
+
+@app.get(
+        IPAM_UTILITY + 'report',
+        tags=['ipam_utility'],
+        response_class=PrettyJSONResponse,
+        )
+def ipam_report(response: Response):
+
+    return UtilityAPIReturn(
+            out=ipam.report(),
+            comment='Addresses and prefixes found in netdb',
+            )
+
+
+@app.get(
+        IPAM_UTILITY + 'chooser',
+        tags=['ipam_utility'],
+        response_class=PrettyJSONResponse,
+        )
+def ipam_report(prefix: IPvAnyNetwork, response: Response):
+
+    return UtilityAPIReturn(
+            out=ipam.chooser(str(prefix)),
+            comment='Sub-prefixes not found in netdb',
             )

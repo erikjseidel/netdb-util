@@ -6,26 +6,58 @@ from starlette.responses import Response
 description = """
 Version 2 of the NetDB Utility API. 🚀
 
-For more information visit [NetDB at Github](https://github.com/erikjseidel/netdb/)
+For more information visit [netdb-util at Github](https://github.com/erikjseidel/netdb-util/)
 """
 
 
 tags = [
     {
-        "name": "list_columns",
-        "description": "show a list of available columns",
+        "name": "netbox_device",
+        "description": "Netbox device configuration data",
     },
     {
-        "name": "column",
-        "description": "endpoints and methods for querying and manipulating column data",
+        "name": "netbox_interface",
+        "description": " Netbox interface configuration data",
     },
     {
-        "name": "device",
-        "description": "show a single set (e.g. device configuration) in a column",
+        "name": "netbox_igp",
+        "description": "Netbox IGP (IS-IS) configuration data",
     },
     {
-        "name": "validate",
-        "description": "validates an NetDBContainer configuration dataset without loading it",
+        "name": "netbox_ebgp",
+        "description": "Netbox internal eBGP configuration data",
+    },
+    {
+        "name": "netbox_script",
+        "description": "Trigger Netbox scripts",
+    },
+    {
+        "name": "pm_sessions",
+        "description": "Endpoints for showing, adding and updating PM sesssions and loading them into NetDB",
+    },
+    {
+        "name": "pm_policy",
+        "description": "Endpoints for showing, adding and updating PM policy objects",
+    },
+    {
+        "name": "pm_asn",
+        "description": "Endpoints for showing, adding and updating PM ASN objects",
+    },
+    {
+        "name": "repo_yaml",
+        "description": "Endpoints for loading REPO YAML configuration data into NetDB",
+    },
+    {
+        "name": "cfdns",
+        "description": "Endpoints for managing and syncing CF managed DNS (PTR) records",
+    },
+    {
+        "name": "ripe_utility",
+        "description": "Utilities that make use of RIPE looking glass API",
+    },
+    {
+        "name": "ipam_utility",
+        "description": "Basic IPAM utilities",
     },
 ]
 

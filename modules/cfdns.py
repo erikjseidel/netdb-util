@@ -3,7 +3,6 @@ import requests, json
 from copy import deepcopy
 from ipaddress import ip_address, ip_network
 from util import netdb
-from util.query import DNS_PROJECT
 from util.utildb_api import utilDB
 from config.secrets import CFDNS_TOKEN
 from util.exception import UtilityAPIException

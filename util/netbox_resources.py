@@ -1,14 +1,3 @@
-from .secrets import NETBOX_TOKEN, NETBOX_URL, NETBOX_PUBLIC_URL
-
-NETBOX_HEADERS = {
-            'Content-Type'  : 'application/json',
-            'Authorization' : 'Token ' + NETBOX_TOKEN,
-            }        
-
-NETBOX_SOURCE = {
-        'name'    :  'netbox',
-        'weight'  :  150,
-        }
 
 NETBOX_ETHERNET = [
         'VIRTUAL',
