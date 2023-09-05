@@ -21,7 +21,7 @@ class RepoException(UtilityAPIException):
     pass
 
 
-class RepoUtility:
+class RepoConnector:
 
     def __init__(self):
         path = f'{REPO_BASE}/top.yaml'

@@ -59,7 +59,7 @@ class PeeringManagerAPI(DjangoAPI):
         }
 
 
-class PeeringManagerUtility:
+class PeeringManagerConnector:
 
     def __init__(self, test=False):
 
@@ -413,13 +413,9 @@ class PeeringManagerUtility:
         url = PeeringManagerAPI('direct-sessions').set_id(session_id).get_public_url()
 
         meta = {
-                'session_id'   : session_id,
                 'url'          : url,
                 'status'       : status,
                 'tags'         : tags,
-                'group'        : group.get('slug'),
-                'group_id'     : group_id,
-                'comments'     : session.get('comments'),
                 'type'         : relationship,
                 }
         meta = { k : v for k, v in meta.items() if v }
@@ -521,14 +517,10 @@ class PeeringManagerUtility:
         url = PeeringManagerAPI('ixp-sessions').set_id(session_id).get_public_url()
 
         meta = {
-                'session_id'    : session_id,
                 'url'           : url,
                 'status'        : status,
                 'tags'          : tags,
                 'ixp'           : ixp.get('slug'),
-                'ixp_id'        : ixp_id,
-                'connection_id' : ixp_id,
-                'comments'      : session.get('comments'),
                 'type'          : 'ixp-session',
                 }
         meta = { k : v for k, v in meta.items() if v }

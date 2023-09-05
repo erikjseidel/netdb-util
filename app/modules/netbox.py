@@ -97,7 +97,7 @@ class NetboxAPI(DjangoAPI):
         return resp.json()
 
 
-class NetboxUtility:
+class NetboxConnector:
 
     def __init__(self, test=False):
         self.test = test
@@ -159,27 +159,19 @@ class NetboxUtility:
             step = 7
 
         if not out:
-            out = {
-                    'result'  : False,
-                    'comment' : 'Netbox script has not yet completed.',
-                    'out'     : {
+            raise NetboxException(
+                    code=404,
+                    message='Netbox script has not yet completed.',
+                    data={
                         script : {
                             'jid'    : ret.get('job_id'),
                             'status' : status,
                             'url'    : url,
                             }
-                        }
-                    }
+                        },
+                    )
 
-        # Empty result set means that there was nothing to be done. Return the
-        # the relevant log failure / warning message.
-        if not out.get('result') or not out.get('out'):
-            return False, out.get('out'), out['comment']
-
-        if commit:
-            return True, out.get('out'), out['comment']
-
-        return True, out.get('out'), 'Dry Run: Database changes have been reverted automatically.'
+        return out
 
 
     def generate_devices(self):

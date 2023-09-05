@@ -9,9 +9,9 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, IPvAnyAddress, IPvAnyNetwork
 from util.exception import UtilityAPIException
 
-from modules.netbox import NetboxUtility
-from modules.pm import PeeringManagerUtility
-from modules.repo import RepoUtility
+from modules.netbox import NetboxConnector
+from modules.pm import PeeringManagerConnector
+from modules.repo import RepoConnector
 from modules.cfdns import CloudflareDNSConnector
 from modules.ripe import RipeStatUtility
 from modules import ipam
@@ -134,7 +134,7 @@ def read_root():
 def netbox_generate_devices(response: Response):
 
     return UtilityAPIReturn(
-            out=NetboxUtility().generate_devices(),
+            out=NetboxConnector().generate_devices(),
             comment='Devices generated from Netbox datasource',
             )
 
@@ -147,7 +147,7 @@ def netbox_generate_devices(response: Response):
 def netbox_reload_devices(response: Response):
 
     return UtilityAPIReturn(
-            out=NetboxUtility().reload_devices(),
+            out=NetboxConnector().reload_devices(),
             comment='Device configuration reloaded from Netbox datasource',
             )
 
@@ -163,7 +163,7 @@ def netbox_reload_devices(response: Response):
 def netbox_generate_interfaces(response: Response):
 
     return UtilityAPIReturn(
-            out=NetboxUtility().generate_interfaces(),
+            out=NetboxConnector().generate_interfaces(),
             comment='Interfaces generated from Netbox datasource',
             )
 
@@ -176,7 +176,7 @@ def netbox_generate_interfaces(response: Response):
 def netbox_reload_interfaces(response: Response):
 
     return UtilityAPIReturn(
-            out=NetboxUtility().reload_interfaces(),
+            out=NetboxConnector().reload_interfaces(),
             comment='Interface configuration reloaded from Netbox datasource',
             )
 
@@ -192,7 +192,7 @@ def netbox_reload_interfaces(response: Response):
 def netbox_generate_igp(response: Response):
 
     return UtilityAPIReturn(
-            out=NetboxUtility().generate_igp(),
+            out=NetboxConnector().generate_igp(),
             comment='IGP configuration generated from Netbox datasource',
             )
 
@@ -205,7 +205,7 @@ def netbox_generate_igp(response: Response):
 def netbox_reload_igp(response: Response):
 
     return UtilityAPIReturn(
-            out=NetboxUtility().reload_igp(),
+            out=NetboxConnector().reload_igp(),
             comment='IGP configuration reloaded from Netbox datasource',
             )
 
@@ -221,7 +221,7 @@ def netbox_reload_igp(response: Response):
 def netbox_generate_ebgp(response: Response):
 
     return UtilityAPIReturn(
-            out=NetboxUtility().generate_ebgp(),
+            out=NetboxConnector().generate_ebgp(),
             comment='eBGP configuration generated from Netbox datasource',
             )
 
@@ -234,7 +234,7 @@ def netbox_generate_ebgp(response: Response):
 def netbox_reload_ebgp(response: Response):
 
     return UtilityAPIReturn(
-            out=NetboxUtility().reload_ebgp(),
+            out=NetboxConnector().reload_ebgp(),
             comment='eBGP configuration reloaded from Netbox datasource',
             )
 
@@ -261,12 +261,12 @@ def netbox_script(
                 message=f'Netbox script "{script}" not available.',
                 )
 
-    result, out, comment = NetboxUtility(test).script_runner(NETBOX_SCRIPTS[script], data)
+    ret = NetboxConnector(test).script_runner(NETBOX_SCRIPTS[script], data)
 
     return UtilityAPIReturn(
-            result=result,
-            out=out,
-            comment=comment,
+            result=ret['result'],
+            out=ret.get('out'),
+            comment=ret.get('comment'),
             )
 
 
@@ -288,7 +288,7 @@ def netbox_script(
 def pm_generate_direct_sessions(response: Response):
 
     return UtilityAPIReturn(
-            out=PeeringManagerUtility().generate_direct_sessions(),
+            out=PeeringManagerConnector().generate_direct_sessions(),
             comment=f'PM direct eBGP sessions',
             )
 
@@ -301,7 +301,7 @@ def pm_generate_direct_sessions(response: Response):
 def pm_create_direct_session(data: dict, response: Response):
 
     return UtilityAPIReturn(
-            out=PeeringManagerUtility().create_direct_session(data),
+            out=PeeringManagerConnector().create_direct_session(data),
             comment='Direct session added to PM',
             )
 
@@ -314,7 +314,7 @@ def pm_create_direct_session(data: dict, response: Response):
 def pm_update_direct_session(data: dict, response: Response):
 
     return UtilityAPIReturn(
-            out=PeeringManagerUtility().update_direct_session(data),
+            out=PeeringManagerConnector().update_direct_session(data),
             comment='Direct session updated in PM',
             )
 
@@ -330,7 +330,7 @@ def pm_delete_direct_session(
         response: Response
         ):
 
-    PeeringManagerUtility().delete_direct_session(device, ip)
+    PeeringManagerConnector().delete_direct_session(device, ip)
 
     return UtilityAPIReturn(
             comment='Direct session deleted from PM',
@@ -345,7 +345,7 @@ def pm_delete_direct_session(
 def pm_generate_ixp_sessions(response: Response):
 
     return UtilityAPIReturn(
-            out=PeeringManagerUtility().generate_ixp_sessions(),
+            out=PeeringManagerConnector().generate_ixp_sessions(),
             comment=f'PM IXP eBGP sessions',
             )
 
@@ -358,7 +358,7 @@ def pm_generate_ixp_sessions(response: Response):
 def pm_reload_sessions(response: Response):
 
     return UtilityAPIReturn(
-            out=PeeringManagerUtility().reload_ebgp(),
+            out=PeeringManagerConnector().reload_ebgp(),
             comment=f'PM eBGP sessions reloaded',
             )
 
@@ -376,7 +376,7 @@ def pm_update_session_status(
         ):
 
     return UtilityAPIReturn(
-            out=PeeringManagerUtility().set_status(device, str(ip), status),
+            out=PeeringManagerConnector().set_status(device, str(ip), status),
             comment='Status changed',
             )
 
@@ -399,7 +399,7 @@ def pm_reload_single_session(
         ):
 
     return UtilityAPIReturn(
-            out=PeeringManagerUtility().reload_session(data.device, str(data.ip)),
+            out=PeeringManagerConnector().reload_session(data.device, str(data.ip)),
             comment=f'PM eBGP session reloaded for {data.ip} at {data.device}',
             )
 
@@ -416,7 +416,7 @@ def pm_reload_single_session(
 def pm_create_policy(data: dict, response: Response):
 
     return UtilityAPIReturn(
-            out=PeeringManagerUtility().create_policy(data),
+            out=PeeringManagerConnector().create_policy(data),
             comment='Policy created in Peering Manager',
             )
 
@@ -428,7 +428,7 @@ def pm_create_policy(data: dict, response: Response):
         )
 def pm_delete_policy(name: str, response: Response):
 
-    PeeringManagerUtility().delete_policy(name)
+    PeeringManagerConnector().delete_policy(name)
 
     return UtilityAPIReturn(
             comment=f'Policy {name} deleted from Peering Manager',
@@ -447,7 +447,7 @@ def pm_delete_policy(name: str, response: Response):
 def pm_create_asn(data: dict, response: Response):
 
     return UtilityAPIReturn(
-            out=PeeringManagerUtility().create_asn(data),
+            out=PeeringManagerConnector().create_asn(data),
             comment='ASN created in Peering Manager',
             )
 
@@ -459,7 +459,7 @@ def pm_create_asn(data: dict, response: Response):
         )
 def pm_peeringdb_asn_sync(asn: int, response: Response):
 
-    PeeringManagerUtility().peeringdb_asn_sync(asn)
+    PeeringManagerConnector().peeringdb_asn_sync(asn)
 
     return UtilityAPIReturn(
             comment=f'AS{asn}: PeeringDB sync complete',
@@ -480,7 +480,7 @@ def pm_peeringdb_asn_sync(asn: int, response: Response):
 def repo_yaml_generate_column(column: str, response: Response):
 
     return UtilityAPIReturn(
-            out=RepoUtility().generate_column(column),
+            out=RepoConnector().generate_column(column),
             comment='Column generated from repo_yaml',
             )
 
@@ -493,7 +493,7 @@ def repo_yaml_generate_column(column: str, response: Response):
 def repo_yaml_reload(column: str, response: Response):
 
     return UtilityAPIReturn(
-            out=RepoUtility().reload_column(column),
+            out=RepoConnector().reload_column(column),
             comment='Column data reloaded into netdb',
             )
 
