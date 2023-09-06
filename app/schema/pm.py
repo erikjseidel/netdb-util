@@ -1,88 +1,93 @@
 from marshmallow import Schema, fields, validate, INCLUDE, ValidationError, post_load
 
 POLICY_TYPES = {
-        'import' : 'import-policy',
-        'export' : 'export-policy',
-        'both'   : 'import-export-policy',
-        }
+    'import': 'import-policy',
+    'export': 'export-policy',
+    'both': 'import-export-policy',
+}
 
 POLICY_FAMILIES = {
-        'ipv4' : 4,
-        'ipv6' : 6,
-        'both' : 0,
-        }
+    'ipv4': 4,
+    'ipv6': 6,
+    'both': 0,
+}
 
 PM_STATUS = ['enabled', 'disabled', 'maintenance']
 
 # Names and translations for relationships for PM direct sessions
 DIRECT_SESSION_VARS = {
-        'local_asn' : 'local_autonomous_system',
-        'peer_asn'  : 'autonomous_system',
-        'type'      : 'relationship',
-        'import'    : 'import_routing_policies',
-        'export'    : 'export_routing_policies',
-        'device'    : 'router',
-        }
+    'local_asn': 'local_autonomous_system',
+    'peer_asn': 'autonomous_system',
+    'type': 'relationship',
+    'import': 'import_routing_policies',
+    'export': 'export_routing_policies',
+    'device': 'router',
+}
 
 DIRECT_SESSION_MASK = [
-        'device',
-        'remote_ip',
-        'import',
-        'export',
-        'local_ip',
-        'status',
-        'password',
-        'ttl',
-        'comment',
-        ]
+    'device',
+    'remote_ip',
+    'import',
+    'export',
+    'local_ip',
+    'status',
+    'password',
+    'ttl',
+    'comment',
+]
 
 # Incoming keys accepted by create_direct_session
 ADD_DIRECT_SESSION_MASK = DIRECT_SESSION_MASK + [
-        'local_asn',
-        'peer_asn',
-        'type',
-        ]
+    'local_asn',
+    'peer_asn',
+    'type',
+]
 
 # Incoming keys accepted by update_direct_session
 UPDATE_DIRECT_SESSION_MASK = DIRECT_SESSION_MASK
 
 DEFAULT_REJECT = 'REJECT-ALL'
 
+
 class PolicySchema(Schema):
-    name    = fields.String(required=True, validate=validate.Regexp("^[A-Za-z0-9-]+$"))
-    type    = fields.String(required=True, validate=validate.OneOf( list(POLICY_TYPES.keys()) ))
-    weight  = fields.Integer(validate = validate.Range(min=1, max=10001))
-    family  = fields.String(required=True, validate=validate.OneOf( list(POLICY_FAMILIES.keys()) ))
+    name = fields.String(required=True, validate=validate.Regexp("^[A-Za-z0-9-]+$"))
+    type = fields.String(
+        required=True, validate=validate.OneOf(list(POLICY_TYPES.keys()))
+    )
+    weight = fields.Integer(validate=validate.Range(min=1, max=10001))
+    family = fields.String(
+        required=True, validate=validate.OneOf(list(POLICY_FAMILIES.keys()))
+    )
     comment = fields.String()
 
     @post_load
     def make_policy(self, data, **kwargs):
-        return  {
-                'name'           : data['name'],
-                'slug'           : data['name'].lower(),
-                'display'        : data['name'],
-                'type'           : POLICY_TYPES[ data['type'] ],
-                'address_family' : POLICY_FAMILIES[ data['family'] ],
-                'weight'         : data.get('weight') or 1000,
-                'comments'       : data.get('comment') or "",
-                }
+        return {
+            'name': data['name'],
+            'slug': data['name'].lower(),
+            'display': data['name'],
+            'type': POLICY_TYPES[data['type']],
+            'address_family': POLICY_FAMILIES[data['family']],
+            'weight': data.get('weight') or 1000,
+            'comments': data.get('comment') or "",
+        }
 
 
 class AsnSchema(Schema):
-    asn     = fields.Integer(required=True)
-    name    = fields.String(required=True)
+    asn = fields.Integer(required=True)
+    name = fields.String(required=True)
     comment = fields.String()
 
-    ipv4_prefix_limit = fields.Integer(validate = validate.Range(min=1, max=10000000))
-    ipv6_prefix_limit = fields.Integer(validate = validate.Range(min=1, max=1000000))
+    ipv4_prefix_limit = fields.Integer(validate=validate.Range(min=1, max=10000000))
+    ipv6_prefix_limit = fields.Integer(validate=validate.Range(min=1, max=1000000))
 
     @post_load
     def make_asn(self, data, **kwargs):
         out = {
-                'asn'      : data['asn'],
-                'name'     : data['name'],
-                'comments' : data.get('comment') or "",
-                }
+            'asn': data['asn'],
+            'name': data['name'],
+            'comments': data.get('comment') or "",
+        }
 
         if n := data.get('ipv6_prefix_limit'):
             out['ipv6_max_prefixes'] = n
@@ -94,34 +99,34 @@ class AsnSchema(Schema):
 
 
 class DirectSessionSchema(Schema):
-    local_ip  = fields.IP()
+    local_ip = fields.IP()
     remote_ip = fields.IP()
-    password  = fields.String()
-    ttl       = fields.Integer(validate = validate.Range(1, 256))
-    comment   = fields.String()
-    status    = fields.String()
+    password = fields.String()
+    ttl = fields.Integer(validate=validate.Range(1, 256))
+    comment = fields.String()
+    status = fields.String()
 
     # PM relationships. Generated by PM utility create / update methods.
     local_autonomous_system = fields.Integer()
-    autonomous_system       = fields.Integer()
-    relationship            = fields.Integer()
+    autonomous_system = fields.Integer()
+    relationship = fields.Integer()
     import_routing_policies = fields.Integer()
     export_routing_policies = fields.Integer()
-    router                  = fields.Integer()
+    router = fields.Integer()
 
     @post_load
     def make_session(self, data, **kwargs):
         FIELD_TRANSLATIONS = {
-                'password'  : 'password',
-                'ttl'       : 'multihop_ttl',
-                'comment'   : 'comments',
-                'status'    : 'status',
-                }
+            'password': 'password',
+            'ttl': 'multihop_ttl',
+            'comment': 'comments',
+            'status': 'status',
+        }
 
         IP_TRANSLATIONS = {
-                'local_ip'  : 'local_ip_address',
-                'remote_ip' : 'ip_address',
-                }
+            'local_ip': 'local_ip_address',
+            'remote_ip': 'ip_address',
+        }
 
         out = {}
         for k, v in FIELD_TRANSLATIONS.items():
@@ -147,6 +152,6 @@ class DirectSessionSchema(Schema):
             if v == 0:
                 out[k] = {}
             else:
-                out[k] = { 'id': v }
+                out[k] = {'id': v}
 
         return out

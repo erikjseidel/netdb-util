@@ -10,11 +10,12 @@ _NETDB_DEV_COLUMN = 'device'
 
 logger = logging.getLogger(__name__)
 
+
 def _container(data):
     return {
-            'column' : data,
-            **REPO_SOURCE,
-            }
+        'column': data,
+        **REPO_SOURCE,
+    }
 
 
 class RepoException(UtilityAPIException):
@@ -22,7 +23,6 @@ class RepoException(UtilityAPIException):
 
 
 class RepoConnector:
-
     def __init__(self):
         path = f'{REPO_BASE}/top.yaml'
 
@@ -39,10 +39,11 @@ class RepoConnector:
         ret = netdb.get(_NETDB_DEV_COLUMN)
 
         if not ret['result']:
-            raise RepoException(code=404, message=f'netdb device get failure: {message}')
+            raise RepoException(
+                code=404, message=f'netdb device get failure: {message}'
+            )
 
         self.devices = ret['out']
-
 
     def _load_templates(self, filenames):
         environment = Environment(loader=FileSystemLoader(REPO_BASE))
@@ -51,15 +52,19 @@ class RepoConnector:
 
         for filename in filenames:
             try:
-                out.append({
-                     'name' : f'{filename}.yaml',
-                     'data' : environment.get_template(f'{filename}.yaml'),
-                    })
+                out.append(
+                    {
+                        'name': f'{filename}.yaml',
+                        'data': environment.get_template(f'{filename}.yaml'),
+                    }
+                )
             except Exception as e:
-                raise RepoException(code=500, message=f'Jinja2 load exception for {filename}.yaml: {e.message}')
+                raise RepoException(
+                    code=500,
+                    message=f'Jinja2 load exception for {filename}.yaml: {e.message}',
+                )
 
         return out
-
 
     def _render_templates(self, node, templates):
         out = {}
@@ -68,19 +73,26 @@ class RepoConnector:
             filename = template['name']
 
             try:
-                rendered = template['data'].render(device=self.devices[node], devices=self.devices)
+                rendered = template['data'].render(
+                    device=self.devices[node], devices=self.devices
+                )
             except Exception as e:
-                raise RepoException(code=500, message=f'Jinja2 rendering exception for {filename}: {e.message}')
+                raise RepoException(
+                    code=500,
+                    message=f'Jinja2 rendering exception for {filename}: {e.message}',
+                )
 
             try:
                 in_data = yaml.safe_load(rendered)
             except Exception as e:
-                raise RepoException(code=422, message=f'YAML load exception for {filename}: Invalid YAML data')
+                raise RepoException(
+                    code=422,
+                    message=f'YAML load exception for {filename}: Invalid YAML data',
+                )
 
             out.update(in_data)
 
         return out
-
 
     def generate_column(self, column):
         out = {}
@@ -102,7 +114,9 @@ class RepoConnector:
                     templates = self._load_templates(set_files)
 
                 for node in nodes:
-                    node_data = self._render_templates(node, common_templates + templates)
+                    node_data = self._render_templates(
+                        node, common_templates + templates
+                    )
 
                     out[node] = deepcopy(node_data)
 
@@ -118,7 +132,6 @@ class RepoConnector:
             out[node].update(deepcopy(node_data))
 
         return out
-
 
     def reload_column(self, column):
         data = self.generate_column(column)

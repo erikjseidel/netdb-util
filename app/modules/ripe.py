@@ -3,6 +3,7 @@ from util.exception import UtilityAPIException
 
 logger = logging.getLogger(__name__)
 
+
 class RipeStatException(UtilityAPIException):
     pass
 
@@ -15,16 +16,15 @@ class RipeStatAPI:
     _API_BASE = "https://stat.ripe.net/data"
 
     _HEADERS = {
-            'Content-Type'  : 'application/json',
-            }   
+        'Content-Type': 'application/json',
+    }
 
     ENDPOINTS = {
-            'looking-glass' : 'looking-glass/data.json',
-            }
+        'looking-glass': 'looking-glass/data.json',
+    }
 
     def __init__(self, endpoint=None):
         self.set(endpoint)
-
 
     def set(self, endpoint):
         self.url = self._API_BASE
@@ -39,11 +39,9 @@ class RipeStatAPI:
             self.url += endpoint
         return self
 
-
     def set_url(self, url):
         self.url = url
         return self
-
 
     def set_params(self, **kwargs):
         suffix = '?'
@@ -60,16 +58,14 @@ class RipeStatAPI:
 
         return self
 
-
     def get_url(self):
         return self.url
-
 
     def get(self):
         url = self.url
         logger.debug(f'RipeStat.get: {url}')
 
-        resp = requests.get(url, headers = self._HEADERS)
+        resp = requests.get(url, headers=self._HEADERS)
 
         if (code := resp.status_code) != 200:
             raise RipeStatException(url, resp.json(), code)
@@ -78,15 +74,15 @@ class RipeStatAPI:
 
 
 class RipeStatUtility:
-
     def __init__(self, test=False):
         self.rs_api = RipeStatAPI()
 
-
     def looking_glass(self, prefix, lookback=300):
-
-        return self.rs_api.set('looking-glass').set_params(resource=prefix, look_back_limit=lookback).get()
-
+        return (
+            self.rs_api.set('looking-glass')
+            .set_params(resource=prefix, look_back_limit=lookback)
+            .get()
+        )
 
     def get_paths(self, prefix):
         as_paths = {}
@@ -99,13 +95,13 @@ class RipeStatUtility:
             for rrc in rrcs:
                 for peer in rrc['peers']:
                     if peer['as_path'] in as_paths:
-                        as_paths[ peer['as_path'] ] += 1
+                        as_paths[peer['as_path']] += 1
                     else:
-                        as_paths[ peer['as_path'] ] = 1
+                        as_paths[peer['as_path']] = 1
 
         entry = {
-                'datasource' : 'ripestat',
-                'as_paths'   : as_paths,
-                }
+            'datasource': 'ripestat',
+            'as_paths': as_paths,
+        }
 
-        return { prefix : entry }
+        return {prefix: entry}

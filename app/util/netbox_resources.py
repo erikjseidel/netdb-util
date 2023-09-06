@@ -1,13 +1,12 @@
-
 NETBOX_ETHERNET = [
-        'VIRTUAL',
-        'VETH',
-        'A_100BASE_TX',
-        'A_1000BASE_T',
-        'A_2_5GBASE_T',
-        'A_5GBASE_T',
-        'A_10GBASE_T',
-        ]
+    'VIRTUAL',
+    'VETH',
+    'A_100BASE_TX',
+    'A_1000BASE_T',
+    'A_2_5GBASE_T',
+    'A_5GBASE_T',
+    'A_10GBASE_T',
+]
 
 DEVICE_GQL = """query {
   device_list {

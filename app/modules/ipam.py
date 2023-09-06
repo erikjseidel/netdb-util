@@ -6,6 +6,7 @@ from util.exception import UtilityAPIException
 
 _NETDB_COLUMN = 'interface'
 
+
 def report():
     """
     Show salt managed IP addresses.
@@ -19,9 +20,9 @@ def report():
 
     if not data:
         raise UtilityAPIException(
-                code=404,
-                message='Empty data set returned',
-                )
+            code=404,
+            message='Empty data set returned',
+        )
 
     report_data = {}
 
@@ -29,7 +30,6 @@ def report():
         for iface, iface_data in interfaces.items():
             if 'address' in iface_data:
                 for addr, addr_data in iface_data['address'].items():
-
                     cidr = addr.split('/')
 
                     report_data[cidr[0]] = {}
@@ -73,17 +73,17 @@ def chooser(prefix):
                     except:
                         continue
 
-    available = IPSet( [str(network)] ) ^ IPSet(prefix_list)
+    available = IPSet([str(network)]) ^ IPSet(prefix_list)
 
     out = {}
     for cidr in available.iter_cidrs():
         prefix = str(cidr)
-        start  = str(cidr[0])
-        end    = str(cidr[-1])
+        start = str(cidr[0])
+        end = str(cidr[-1])
 
         out[prefix] = {
-                'start':  start,
-                'end':    end,
-                }
+            'start': start,
+            'end': end,
+        }
 
     return out

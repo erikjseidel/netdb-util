@@ -62,9 +62,9 @@ tags = [
 ]
 
 ERR_READONLY = {
-        'result' : False,
-        'comment' : 'NetDB Utility API is running in read only mode.',
-        }
+    'result': False,
+    'comment': 'NetDB Utility API is running in read only mode.',
+}
 
 
 class UtilityAPIReturn(BaseModel):

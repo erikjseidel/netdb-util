@@ -13,36 +13,37 @@ _IGP_COLUMN = 'igp'
 _BGP_COLUMN = 'bgp'
 
 NETBOX_HEADERS = {
-            'Content-Type'  : 'application/json',
-            'Authorization' : 'Token ' + NETBOX_TOKEN,
-            }
+    'Content-Type': 'application/json',
+    'Authorization': 'Token ' + NETBOX_TOKEN,
+}
 
 # Supported vyos if types
-_VYOS_VLAN  = "^(eth|bond)([0-9]{1,3})(\.)([0-9]{1,4})$"
-_VYOS_ETH   = "^(eth)([0-9]{1,3})$"
-_VYOS_LAG   = "^(bond)([0-9]{1,3})$"
-_VYOS_TUN   = "^(tun)([0-9]{1,3})$"
-_VYOS_DUM   = "^(dum)([0-9]{1,3})$"
+_VYOS_VLAN = "^(eth|bond)([0-9]{1,3})(\.)([0-9]{1,4})$"
+_VYOS_ETH = "^(eth)([0-9]{1,3})$"
+_VYOS_LAG = "^(bond)([0-9]{1,3})$"
+_VYOS_TUN = "^(tun)([0-9]{1,3})$"
+_VYOS_DUM = "^(dum)([0-9]{1,3})$"
 
 _TYPE_DICT = {
-        'eth'    :  re.compile(_VYOS_ETH),
-        'gre'    :  re.compile(_VYOS_TUN),
-        'l2gre'  :  re.compile(_VYOS_TUN),
-        'vlan'   :  re.compile(_VYOS_VLAN),
-        'lacp'   :  re.compile(_VYOS_LAG),
-        'dummy'  :  re.compile(_VYOS_DUM),
-        }
+    'eth': re.compile(_VYOS_ETH),
+    'gre': re.compile(_VYOS_TUN),
+    'l2gre': re.compile(_VYOS_TUN),
+    'vlan': re.compile(_VYOS_VLAN),
+    'lacp': re.compile(_VYOS_LAG),
+    'dummy': re.compile(_VYOS_DUM),
+}
 
 # Used to verify parent interfaces for tunnels
-_VYOS_PARENT  = "^(eth|bond)([0-9]{1,3})(?:(\.)([0-9]{1,4})){0,1}$"
+_VYOS_PARENT = "^(eth|bond)([0-9]{1,3})(?:(\.)([0-9]{1,4})){0,1}$"
 
 logger = logging.getLogger(__name__)
 
+
 def _container(data):
     return {
-            'column' : data,
-            **NETBOX_SOURCE,
-            }
+        'column': data,
+        **NETBOX_SOURCE,
+    }
 
 
 class NetboxException(UtilityAPIException):
@@ -53,6 +54,7 @@ class NetboxAPI(DjangoAPI):
     """
     Simple class for interacting with Netbox API and GQL endpoint.
     """
+
     _API_BASE = NETBOX_URL + '/api'
 
     _PUBLIC_API_BASE = NETBOX_PUBLIC_URL
@@ -80,8 +82,7 @@ class NetboxAPI(DjangoAPI):
         if ret := data.get('results'):
             return data
 
-        return ( data.get('result') or data )
-
+        return data.get('result') or data
 
     def gql(self, query):
         url = self._GRAPHQL_BASE
@@ -98,16 +99,14 @@ class NetboxAPI(DjangoAPI):
 
 
 class NetboxConnector:
-
     def __init__(self, test=False):
         self.test = test
         self.nb_api = NetboxAPI()
 
-
     def script_runner(self, script, data={}):
-        """ 
+        """
         Used to run netbox scripts, poll the job for set number of seconds, and
-        then return output from the job result. 
+        then return output from the job result.
 
         Uses data prepared by public methods. Expects yaml formatted output.
         """
@@ -115,7 +114,7 @@ class NetboxConnector:
 
         self.nb_api.set('extras/scripts').set_suffix(script)
 
-        result = self.nb_api.call_script({ 'data': data, 'commit': commit })
+        result = self.nb_api.call_script({'data': data, 'commit': commit})
 
         # Location of the script's job
         if not (url := result.get('url')):
@@ -142,16 +141,16 @@ class NetboxConnector:
 
             elif status == 'errored':
                 raise NetboxException(
-                        code=400,
-                        message='Netbox script encountered a runtime error',
-                        data={
-                            script : {
-                                'jid'    : ret.get('job_id'),
-                                'status' : status,
-                                'url'    : url,
-                                }
-                            },
-                        )
+                    code=400,
+                    message='Netbox script encountered a runtime error',
+                    data={
+                        script: {
+                            'jid': ret.get('job_id'),
+                            'status': status,
+                            'url': url,
+                        }
+                    },
+                )
 
             time_bank -= step
 
@@ -160,19 +159,18 @@ class NetboxConnector:
 
         if not out:
             raise NetboxException(
-                    code=404,
-                    message='Netbox script has not yet completed.',
-                    data={
-                        script : {
-                            'jid'    : ret.get('job_id'),
-                            'status' : status,
-                            'url'    : url,
-                            }
-                        },
-                    )
+                code=404,
+                message='Netbox script has not yet completed.',
+                data={
+                    script: {
+                        'jid': ret.get('job_id'),
+                        'status': status,
+                        'url': url,
+                    }
+                },
+            )
 
         return out
-
 
     def generate_devices(self):
         ret = self.nb_api.gql(netbox.DEVICE_GQL)
@@ -207,59 +205,61 @@ class NetboxConnector:
                 for peer in port['link_peers']:
                     if circuit := peer.get('circuit'):
                         if provider := circuit.get('provider'):
-                            if ( slug := provider['slug'] ) not in providers:
+                            if (slug := provider['slug']) not in providers:
                                 providers.append(slug)
 
                 # Upstreams in cloud providers (such as Vultr) are marked as VXLAN EXPN type
                 # L2VPNs in Netbox.
                 for termination in port['l2vpn_terminations']:
                     if l2vpn := termination.get('l2vpn'):
-                        if ( slug := l2vpn['slug'] ) not in providers:
+                        if (slug := l2vpn['slug']) not in providers:
                             providers.append(slug)
 
             return providers
-    
+
         out = {}
 
         if ret['data']:
             for device in ret['data']['device_list']:
-                if ( device['site']['status'].lower() not in ['active', 'staging', 'decommissioning']
-                        or device['status'].lower() not in ['active', 'staged'] ):
+                if device['site']['status'].lower() not in [
+                    'active',
+                    'staging',
+                    'decommissioning',
+                ] or device['status'].lower() not in ['active', 'staged']:
                     continue
 
                 url = NetboxAPI('dcim/devices').set_id(device['id']).get_public_url()
 
                 entry = {
-                        'location'   : device['site']['region']['slug'],
-                        'roles'      : _gen_roles(device),
-                        'providers'  : _gen_providers(device),
-                        'node_name'  : device['name'],
-                        }
+                    'location': device['site']['region']['slug'],
+                    'roles': _gen_roles(device),
+                    'providers': _gen_providers(device),
+                    'node_name': device['name'],
+                }
 
                 meta = {
-                        'netbox': {
-                            'id'           : int(device['id']),
-                            'url'          : url,
-                            'status'       : device['status'],
-                            'last_updated' : device['last_updated'],
-                            },
-                        }
+                    'netbox': {
+                        'id': int(device['id']),
+                        'url': url,
+                        'status': device['status'],
+                        'last_updated': device['last_updated'],
+                    },
+                }
                 entry['meta'] = meta
 
                 cvars = {
-                        'ibgp_ipv4' : _get_ip(device, 'ibgp_ipv4'),
-                        'ibgp_ipv6' : _get_ip(device, 'ibgp_ipv6'),
-                        'iso'       : device['custom_fields']['iso_address'],
-                        'router_id' : device['custom_fields']['router_id'],
-                        'local_asn' : device['site']['asns'][0]['asn'],
-                        }
-                entry['cvars'] = { k : v for k, v in cvars.items() if v }
-                out[ device['name'] ] = { k : v for k, v in entry.items() if v }
+                    'ibgp_ipv4': _get_ip(device, 'ibgp_ipv4'),
+                    'ibgp_ipv6': _get_ip(device, 'ibgp_ipv6'),
+                    'iso': device['custom_fields']['iso_address'],
+                    'router_id': device['custom_fields']['router_id'],
+                    'local_asn': device['site']['asns'][0]['asn'],
+                }
+                entry['cvars'] = {k: v for k, v in cvars.items() if v}
+                out[device['name']] = {k: v for k, v in entry.items() if v}
         else:
             return None
 
         return out
-
 
     def generate_interfaces(self):
         ret = self.nb_api.gql(netbox.IFACE_GQL)
@@ -267,7 +267,7 @@ class NetboxConnector:
         out = {}
 
         if ret['data']:
-            interfaces  = ret['data'].get('interface_list')
+            interfaces = ret['data'].get('interface_list')
             fw_contexts = ret['data'].get('config_context_list')
 
             for interface in interfaces:
@@ -275,56 +275,61 @@ class NetboxConnector:
 
                 name = interface['name']
                 type = interface['type']
-                tags = [ i['name'] for i in interface['tags'] ]
+                tags = [i['name'] for i in interface['tags']]
 
-                url = NetboxAPI('dcim/interfaces').set_id(interface['id']).get_public_url()
+                url = (
+                    NetboxAPI('dcim/interfaces')
+                    .set_id(interface['id'])
+                    .get_public_url()
+                )
 
                 # unmanaged / decom / hypervisor tagged interfaces are ignored
                 if 'unmanaged' in tags or 'decom' in tags or 'hypervisor' in tags:
                     continue
 
-                meta =  {
-                        'netbox' : {
-                            'id'           : int(interface['id']),
-                            'url'          : url,
-                            'last_updated' : interface['last_updated'],
-                            },
-                        }
+                meta = {
+                    'netbox': {
+                        'id': int(interface['id']),
+                        'url': url,
+                        'last_updated': interface['last_updated'],
+                    },
+                }
 
                 entry = {
-                        'meta'        : meta,
-                        'mtu'         : interface['mtu'],
-                        'description' : interface['description'],
-                        }
+                    'meta': meta,
+                    'mtu': interface['mtu'],
+                    'description': interface['description'],
+                }
 
                 if not interface['enabled']:
                     entry['disabled'] = True
 
                 if route_policy := interface['custom_fields'].get('route_policy'):
-                    entry['policy'] = { 'ipv4' : route_policy, }
+                    entry['policy'] = {
+                        'ipv4': route_policy,
+                    }
 
                 addrs = {}
                 for address in interface['ip_addresses']:
-                    url = NetboxAPI('ipam/ip-addresses').set_id(address['id']).get_public_url()
+                    url = (
+                        NetboxAPI('ipam/ip-addresses')
+                        .set_id(address['id'])
+                        .get_public_url()
+                    )
 
-                    meta =  {
-                            'netbox' : {
-                                'id'           : int(address['id']),
-                                'url'          : url,
-                                'last_updated' : address['last_updated'],
-                                },
-                            'tags' : [
-                                i['name']
-                                for i in address['tags']
-                                ],
-                            }
+                    meta = {
+                        'netbox': {
+                            'id': int(address['id']),
+                            'url': url,
+                            'last_updated': address['last_updated'],
+                        },
+                        'tags': [i['name'] for i in address['tags']],
+                    }
 
                     if ptr := address['dns_name']:
-                        meta.update({
-                            'dns' : { 'ptr' : ptr }
-                            })
+                        meta.update({'dns': {'ptr': ptr}})
 
-                    addrs[ address['address'] ] = { 'meta' : meta }
+                    addrs[address['address']] = {'meta': meta}
 
                 entry['address'] = addrs
 
@@ -341,12 +346,12 @@ class NetboxConnector:
                 elif type == 'LAG':
                     entry['type'] = 'lacp'
 
-                    lacp =  {
-                            'rate'        : 'fast',
-                            'min_links'   : 1,
-                            'hash_policy' : 'layer2+3',
-                            'members'     : [],
-                        }
+                    lacp = {
+                        'rate': 'fast',
+                        'min_links': 1,
+                        'hash_policy': 'layer2+3',
+                        'members': [],
+                    }
 
                     if min_links := interface['custom_fields'].get('lacp_min_links'):
                         entry['lacp']['min_links'] = min_links
@@ -365,18 +370,18 @@ class NetboxConnector:
 
                     if not interface['untagged_vlan']:
                         raise NetboxException(
-                                message=f'{device} {name}: untagged VLAN ID is required'
-                                )
+                            message=f'{device} {name}: untagged VLAN ID is required'
+                        )
 
                     if not interface['parent']:
                         raise NetboxException(
-                                message=f'{device} {name}: parent interface required'
-                                )
+                            message=f'{device} {name}: parent interface required'
+                        )
 
-                    vlan =  {
-                            'id'     : interface['untagged_vlan']['vid'],
-                            'parent' : interface['parent']['name'],
-                            }
+                    vlan = {
+                        'id': interface['untagged_vlan']['vid'],
+                        'parent': interface['parent']['name'],
+                    }
 
                     entry['vlan'] = vlan
 
@@ -390,7 +395,7 @@ class NetboxConnector:
                     if parent := interface['parent']:
                         if ips := parent['ip_addresses']:
                             for ip in ips:
-                                if 'tun_src' in [ i['name'] for i in ip['tags'] ]:
+                                if 'tun_src' in [i['name'] for i in ip['tags']]:
                                     entry['source'] = ip['address'].split('/')[0]
                                     break
 
@@ -411,7 +416,7 @@ class NetboxConnector:
                         if parent := peer['parent']:
                             if ips := parent['ip_addresses']:
                                 for ip in ips:
-                                    if 'tun_src' in [ i['name'] for i in ip['tags'] ]:
+                                    if 'tun_src' in [i['name'] for i in ip['tags']]:
                                         entry['remote'] = ip['address'].split('/')[0]
                                         break
 
@@ -424,13 +429,15 @@ class NetboxConnector:
                             entry['disabled'] = True
 
                 else:
-                    raise NetboxException( message=f'{device}: invalid type for {name}' )
+                    raise NetboxException(message=f'{device}: invalid type for {name}')
 
                 # Load firewall rules based on tag join on interfaces and config_contexts.
                 # TBD: Order loads by weight.
                 for context in fw_contexts:
                     for tag in tags:
-                        if tag.startswith("fw_") and tag in [ i['name'] for i in context['tags'] ]:
+                        if tag.startswith("fw_") and tag in [
+                            i['name'] for i in context['tags']
+                        ]:
                             if not entry.get('firewall'):
                                 entry['firewall'] = {}
                             entry['firewall'].update(json.loads(context['data']))
@@ -438,12 +445,11 @@ class NetboxConnector:
                 if not out.get(device):
                     out[device] = {}
 
-                out[device][name] = { k : v for k, v in entry.items() if v }
+                out[device][name] = {k: v for k, v in entry.items() if v}
         else:
             return None
 
         return out
-
 
     def generate_igp(self):
         ret = self.nb_api.gql(netbox.IGP_GQL)
@@ -451,15 +457,13 @@ class NetboxConnector:
         out = {}
 
         if ret['data']:
-            devices  = ret['data'].get('devices')
+            devices = ret['data'].get('devices')
             contexts = ret['data'].get('contexts')
 
             for device in devices:
                 name = device['name']
 
-                entry = {
-                        'meta'       : {}
-                        }
+                entry = {'meta': {}}
 
                 # Load base config for this device.
                 success = False
@@ -469,9 +473,9 @@ class NetboxConnector:
                             if data := json.loads(context['data']):
                                 entry.update(data['isis'])
                                 entry['meta']['netbox'] = {
-                                        'name'         : context['name'],
-                                        'last_updated' : context['last_updated'],
-                                        }
+                                    'name': context['name'],
+                                    'last_updated': context['last_updated'],
+                                }
 
                                 success = True
                                 break
@@ -484,25 +488,24 @@ class NetboxConnector:
                 for status in ['active', 'passive']:
                     for interface in device[status]:
                         iface = {
-                                'name' : interface['name'],
-                                }
+                            'name': interface['name'],
+                        }
                         if status == 'passive':
                             iface[status] = 'y'
 
                         interfaces.append(iface)
 
-                isis =  {
-                        'interfaces' : interfaces,
-                        'iso'        : device['custom_fields'].get('iso_address'),
-                        }
+                isis = {
+                    'interfaces': interfaces,
+                    'iso': device['custom_fields'].get('iso_address'),
+                }
                 entry.update(isis)
 
-                out[name] = { 'isis': entry }
+                out[name] = {'isis': entry}
         else:
             return None
 
         return out
-
 
     def generate_ebgp(self):
         ret = self.nb_api.gql(netbox.EBGP_GQL)
@@ -519,13 +522,17 @@ class NetboxConnector:
                     bgp_peers = device['config_context']['bgp']['peers']
                 except KeyError:
                     continue
-                
+
                 neighbors = {}
                 for interface in device['ebgp_interfaces']:
-                    iface_tags = [ i['name'] for i in interface['tags'] ]
+                    iface_tags = [i['name'] for i in interface['tags']]
 
                     # unmanaged / decom / hypervisor tagged interfaces are ignored
-                    if 'unmanaged' in iface_tags or 'decom' in iface_tags or 'hypervisor' in iface_tags:
+                    if (
+                        'unmanaged' in iface_tags
+                        or 'decom' in iface_tags
+                        or 'hypervisor' in iface_tags
+                    ):
                         continue
 
                     # "unwired" interfaces are ignored
@@ -537,10 +544,10 @@ class NetboxConnector:
                         continue
 
                     if vl['interface_a'].get('id') == interface['id']:
-                        my_iface   = vl['interface_a']
+                        my_iface = vl['interface_a']
                         peer_iface = vl['interface_b']
                     else:
-                        my_iface   = vl['interface_b']
+                        my_iface = vl['interface_b']
                         peer_iface = vl['interface_a']
 
                     try:
@@ -555,22 +562,24 @@ class NetboxConnector:
                             continue
 
                     for ip in peer_iface['ip_addresses']:
-                        ip_tags = [ i['name'] for i in ip['tags'] ]
+                        ip_tags = [i['name'] for i in ip['tags']]
 
                         if 'prune' in ip_tags or 'decom' in ip_tags:
                             # IPs marked for removal are ignored.
                             continue
 
                         try:
-                            peer_group = bgp_peer[ ip['family']['label'].lower() ]['peer_group']
+                            peer_group = bgp_peer[ip['family']['label'].lower()][
+                                'peer_group'
+                            ]
                         except KeyError:
                             # No peer group defined for this address family. continue.
                             continue
 
                         neighbor = {
-                                'peer_group' : peer_group,
-                                }
-                        neighbors[ str(ip['address']).split('/')[0] ] = neighbor
+                            'peer_group': peer_group,
+                        }
+                        neighbors[str(ip['address']).split('/')[0]] = neighbor
 
                 if neighbors:
                     out[device_name] = {}
@@ -585,18 +594,15 @@ class NetboxConnector:
 
         return netdb.reload(_DEVICES_COLUMN, _container(data))
 
-
     def reload_interfaces(self):
         data = self.generate_interfaces()
 
         return netdb.reload(_IFACES_COLUMN, _container(data))
 
-
     def reload_igp(self):
         data = self.generate_igp()
 
         return netdb.reload(_IGP_COLUMN, _container(data))
-
 
     def reload_ebgp(self):
         data = self.generate_ebgp()

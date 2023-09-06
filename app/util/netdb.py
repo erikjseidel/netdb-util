@@ -3,29 +3,29 @@ from util.exception import UtilityAPIException
 from config.secrets import NETDB_URL
 
 HEADERS = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        }
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+}
 
 logger = logging.getLogger(__name__)
 
-def _call_netdb(url, method, data=None, params=None):
 
+def _call_netdb(url, method, data=None, params=None):
     ret = requests.request(
-            url=url,
-            method=method,
-            json=data,
-            params=params,
-            headers=HEADERS
-            )
+        url=url, method=method, json=data, params=params, headers=HEADERS
+    )
 
     if ret.status_code in [404, 422]:
         answer = ret.json()
 
-        raise UtilityAPIException(url, ret.status_code, answer.get('out'), answer['comment'])
+        raise UtilityAPIException(
+            url, ret.status_code, answer.get('out'), answer['comment']
+        )
 
     if ret.status_code != 200:
-        raise UtilityAPIException(url, 503, message='Invalid netdb response: \n{}'.format(ret))
+        raise UtilityAPIException(
+            url, 503, message='Invalid netdb response: \n{}'.format(ret)
+        )
 
     return ret.json()
 
@@ -35,7 +35,7 @@ def get(column, params=None, endpoint=None):
 
     if endpoint:
         url += '/' + endpoint
-    
+
     logger.debug(f'_netdb_get: { url }')
 
     return _call_netdb(url=url, method='GET', params=params)

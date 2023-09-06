@@ -8,9 +8,10 @@ class UtilityAPIException(Exception):
         data    -- JSON response body content
         message -- explanation of the error
     """
+
     def __init__(self, url=None, code=422, data=None, message='An exception occured.'):
-        self.url     = url
-        self.code    = code
-        self.data    = data
+        self.url = url
+        self.code = code
+        self.data = data
         self.message = message
         super().__init__(self.message)
