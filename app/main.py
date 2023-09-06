@@ -1,9 +1,5 @@
-import util.api_resources as resources
-
-from typing import Optional, Union
-from contextlib import asynccontextmanager
+from typing import Union
 from fastapi import FastAPI, Request, Response, status
-from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError, HTTPException
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, IPvAnyAddress, IPvAnyNetwork
@@ -16,11 +12,8 @@ from modules.cfdns import CloudflareDNSConnector
 from modules.ripe import RipeStatUtility
 from modules import ipam
 
-from util.api_resources import (
-    UtilityAPIReturn,
-    PrettyJSONResponse,
-    ERR_READONLY,
-)
+import util.api_resources as resources
+from util.api_resources import UtilityAPIReturn, PrettyJSONResponse
 
 app = FastAPI(
     title="NetDB Util API Version 2",
@@ -250,7 +243,7 @@ def netbox_script(
     test: bool = True,
     data: dict = {},
 ):
-    if script not in NETBOX_SCRIPTS.keys():
+    if not NETBOX_SCRIPTS.get(script):
         raise UtilityAPIException(
             code=404,
             message=f'Netbox script "{script}" not available.',
@@ -284,7 +277,7 @@ def netbox_script(
 def pm_generate_direct_sessions(response: Response):
     return UtilityAPIReturn(
         out=PeeringManagerConnector().generate_direct_sessions(),
-        comment=f'PM direct eBGP sessions',
+        comment='PM direct eBGP sessions',
     )
 
 
@@ -333,7 +326,7 @@ def pm_delete_direct_session(device: str, ip: IPvAnyAddress, response: Response)
 def pm_generate_ixp_sessions(response: Response):
     return UtilityAPIReturn(
         out=PeeringManagerConnector().generate_ixp_sessions(),
-        comment=f'PM IXP eBGP sessions',
+        comment='PM IXP eBGP sessions',
     )
 
 
@@ -345,7 +338,7 @@ def pm_generate_ixp_sessions(response: Response):
 def pm_reload_sessions(response: Response):
     return UtilityAPIReturn(
         out=PeeringManagerConnector().reload_ebgp(),
-        comment=f'PM eBGP sessions reloaded',
+        comment='PM eBGP sessions reloaded',
     )
 
 
@@ -622,7 +615,7 @@ def ipam_report(response: Response):
     tags=['ipam_utility'],
     response_class=PrettyJSONResponse,
 )
-def ipam_report(prefix: IPvAnyNetwork, response: Response):
+def ipam_chooser(prefix: IPvAnyNetwork, response: Response):
     return UtilityAPIReturn(
         out=ipam.chooser(str(prefix)),
         comment='Sub-prefixes not found in netdb',

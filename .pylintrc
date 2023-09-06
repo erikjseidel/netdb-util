@@ -637,4 +637,5 @@ disable=import-error,
         missing-class-docstring,
         dangerous-default-value,
         redefined-outer-name,
-        unused-argument
+        unused-argument,
+        invalid-name
