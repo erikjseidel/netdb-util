@@ -28,9 +28,6 @@ class CloudflareDNSConnector:
         'Authorization': 'Bearer ' + CFDNS_TOKEN,
     }
 
-    def __init__(self):
-        self.CF_MANAGED = self.get_cfzones()
-
     def _get_ptrs(self):
         data = netdb.get(_NETDB_COLUMN)['out']
 
@@ -223,6 +220,9 @@ class CloudflareDNSConnector:
                     name, content['ptr'], content['zone'], content['cf_id']
                 )
 
+    def _load_cfzones(self):
+        self.CF_MANAGED = self.get_cfzones()
+
     def get_cfzones(self):
         filt = {
             "type": "managed_zone",
@@ -262,9 +262,11 @@ class CloudflareDNSConnector:
             "provider": "cloudflare",
         }
 
-        return utilDB(_UTIL_COLLECTION).replace_one(filt, entry)
+        utilDB(_UTIL_COLLECTION).replace_one(filt, entry)
 
     def delete_cfzone(self, prefix):
+        self._load_cfzones()
+
         db = utilDB(_UTIL_COLLECTION)
         filt = {"prefix": prefix, "type": "managed_zone", "provider": "cloudflare"}
 
@@ -279,6 +281,8 @@ class CloudflareDNSConnector:
         return count
 
     def synchronize(self, test=True):
+        self._load_cfzones()
+
         data = self._get_ptrs()
         if not data:
             raise CloudflareException(
@@ -293,6 +297,8 @@ class CloudflareDNSConnector:
         return cf_managed
 
     def list_records(self):
+        self._load_cfzones()
+
         cf_managed = deepcopy(self.CF_MANAGED)
 
         for zone, zone_data in cf_managed.items():
