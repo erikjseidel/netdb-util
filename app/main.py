@@ -514,7 +514,7 @@ class CFZoneInput(BaseModel):
     response_class=PrettyJSONResponse,
 )
 def cfdns_upsert_zone(data: CFZoneInput, response: Response):
-    count = CloudflareDNSConnector().set_cfzone(
+    CloudflareDNSConnector().set_cfzone(
         account=data.account,
         zone=data.zone,
         prefix=data.prefix,
@@ -522,8 +522,8 @@ def cfdns_upsert_zone(data: CFZoneInput, response: Response):
     )
 
     return UtilityAPIReturn(
-        result=bool(count),
-        comment=f'{count} CF managed PTR Zone upserted.',
+        result=True,
+        comment=f'CF managed PTR Zone upserted.',
     )
 
 
