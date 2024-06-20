@@ -80,6 +80,10 @@ IFACE_GQL = """query {
     mac_address
     enabled
     custom_fields
+    vrf {
+      id
+      name
+    }
     untagged_vlan {
       vid
     }
@@ -164,6 +168,10 @@ ONE_IFACE_GQL = """query {
     mac_address
     enabled
     custom_fields
+    vrf {
+      id
+      name
+    }
     untagged_vlan {
       vid
     }
