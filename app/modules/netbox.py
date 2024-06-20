@@ -299,6 +299,8 @@ class NetboxConnector:
                     'meta': meta,
                     'mtu': interface['mtu'],
                     'description': interface['description'],
+                    'vrf': (interface.get('vrf') or {}).get('name'),
+                    'use_dhcp': bool(interface['custom_fields'].get('use_dhcp')),
                 }
 
                 if not interface['enabled']:
