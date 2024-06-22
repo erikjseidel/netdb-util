@@ -24,6 +24,13 @@ DEVICE_GQL = """query {
         email
       }
     }
+    interfaces {
+      name
+      type
+      tags {
+        name
+      }
+    }
     last_updated
     site {
       id
