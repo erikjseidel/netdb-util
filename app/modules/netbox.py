@@ -36,6 +36,13 @@ _TYPE_DICT = {
 # Used to verify parent interfaces for tunnels
 _VYOS_PARENT = "^(eth|bond)([0-9]{1,3})(?:(\.)([0-9]{1,4})){0,1}$"
 
+NO_LLDP_IFACE_TAGS = [
+    'wan_port',
+    'ix_port',
+    'decom',
+    'l3ptp',
+]
+
 logger = logging.getLogger(__name__)
 
 
@@ -256,6 +263,15 @@ class NetboxConnector:
                     'primary_ipv4': device['primary_ip4']['address'].split('/')[0],
                     'primary_ipv6': device['primary_ip6']['address'].split('/')[0],
                     'primary_contact': device['contacts'][0]['contact']['email'],
+                    'lldp_interfaces': [
+                        interface['name']
+                        for interface in device['interfaces']
+                        if not any(
+                            no_lldp_tags in [tag['name'] for tag in interface['tags']]
+                            for no_lldp_tags in NO_LLDP_IFACE_TAGS
+                        )
+                        and interface['type'] != "DUMMY"
+                    ],
                 }
                 entry['cvars'] = {k: v for k, v in cvars.items() if v}
                 out[device['name']] = {k: v for k, v in entry.items() if v}
