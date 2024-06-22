@@ -180,7 +180,6 @@ class NetboxConnector:
         return out
 
     def generate_devices(self):
-        ret = self.nb_api.gql(netbox.DEVICE_GQL)
 
         def _get_ip(device, tag):
             for iface in device['loopbacks']:
@@ -224,9 +223,12 @@ class NetboxConnector:
 
             return providers
 
+        ret = self.nb_api.gql(netbox.DEVICE_GQL)
         out = {}
 
         if ret['data']:
+            root_prefixes = [prefix['prefix'] for prefix in ret['data']['prefix_list']]
+
             for device in ret['data']['device_list']:
                 if device['site']['status'].lower() not in [
                     'active',
@@ -272,6 +274,7 @@ class NetboxConnector:
                         )
                         and interface['type'] != "DUMMY"
                     ],
+                    'znsl_prefixes': root_prefixes,
                 }
                 entry['cvars'] = {k: v for k, v in cvars.items() if v}
                 out[device['name']] = {k: v for k, v in entry.items() if v}

@@ -13,16 +13,12 @@ DEVICE_GQL = """query {
     id
     status
     name
+    last_updated
     primary_ip4 {
       address
     }
     primary_ip6 {
       address
-    }
-    contacts {
-      contact {
-        email
-      }
     }
     interfaces {
       name
@@ -31,7 +27,11 @@ DEVICE_GQL = """query {
         name
       }
     }
-    last_updated
+    contacts {
+      contact {
+        email
+      }
+    }
     site {
       id
       name
@@ -82,6 +82,9 @@ DEVICE_GQL = """query {
         }
       }
     }
+  }
+  prefix_list(role: "container") {
+    prefix
   }
 }"""
 
