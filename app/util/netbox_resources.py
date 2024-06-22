@@ -13,6 +13,17 @@ DEVICE_GQL = """query {
     id
     status
     name
+    primary_ip4 {
+      address
+    }
+    primary_ip6 {
+      address
+    }
+    contacts {
+      contact {
+        email
+      }
+    }
     last_updated
     site {
       id
