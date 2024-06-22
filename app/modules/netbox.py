@@ -253,6 +253,9 @@ class NetboxConnector:
                     'iso': device['custom_fields']['iso_address'],
                     'router_id': device['custom_fields']['router_id'],
                     'local_asn': device['site']['asns'][0]['asn'],
+                    'primary_ipv4': device['primary_ip4']['address'].split('/')[0],
+                    'primary_ipv6': device['primary_ip6']['address'].split('/')[0],
+                    'primary_contact': device['contacts'][0]['contact']['email'],
                 }
                 entry['cvars'] = {k: v for k, v in cvars.items() if v}
                 out[device['name']] = {k: v for k, v in entry.items() if v}
