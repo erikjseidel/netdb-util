@@ -225,14 +225,14 @@ class NetboxConnector:
 
         def _gen_dhcp_ranges(service, dhcp_ranges):
 
-            server_ips = [
+            router_ips = [
                 ipaddress.ip_interface(ip['address']) for ip in service['ipaddresses']
             ]
 
             out = []
-            for server_ip in server_ips:
+            for router_ip in router_ips:
 
-                entry = {'server_ip': str(server_ip.ip), 'ranges': []}
+                entry = {'network': str(router_ip.network), 'router_ip': str(router_ip.ip), 'ranges': []}
 
                 for range in dhcp_ranges:
 
@@ -240,8 +240,8 @@ class NetboxConnector:
                     end_address = ipaddress.ip_interface(range['end_address'])
 
                     if (
-                        start_address in server_ip.network
-                        and end_address in server_ip.network
+                        start_address in router_ip.network
+                        and end_address in router_ip.network
                     ):
                         entry['ranges'].append(
                             {
