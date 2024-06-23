@@ -27,6 +27,12 @@ DEVICE_GQL = """query {
         name
       }
     }
+    services {
+      name
+      ipaddresses {
+        address
+      }
+    }
     contacts {
       contact {
         email
@@ -85,6 +91,13 @@ DEVICE_GQL = """query {
   }
   prefix_list(role: "container") {
     prefix
+  }
+  ip_range_list(role: "dhcp-range") {
+    start_address
+    end_address
+  }
+  ip_address_list(tag: "global_dns_server") {
+    address
   }
 }"""
 

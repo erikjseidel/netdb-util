@@ -223,11 +223,48 @@ class NetboxConnector:
 
             return providers
 
+        def _gen_dhcp_ranges(service, dhcp_ranges):
+
+            server_ips = [
+                ipaddress.ip_interface(ip['address']) for ip in service['ipaddresses']
+            ]
+
+            out = []
+            for server_ip in server_ips:
+
+                entry = {'server_ip': str(server_ip.ip), 'ranges': []}
+
+                for range in dhcp_ranges:
+
+                    start_address = ipaddress.ip_interface(range['start_address'])
+                    end_address = ipaddress.ip_interface(range['end_address'])
+
+                    if (
+                        start_address in server_ip.network
+                        and end_address in server_ip.network
+                    ):
+                        entry['ranges'].append(
+                            {
+                                'start_address': str(start_address.ip),
+                                'end_address': str(end_address.ip),
+                            }
+                        )
+
+                if entry['ranges']:
+                    out.append(entry)
+
+            return out
+
         ret = self.nb_api.gql(netbox.DEVICE_GQL)
         out = {}
 
         if ret['data']:
             root_prefixes = [prefix['prefix'] for prefix in ret['data']['prefix_list']]
+            dhcp_ranges = ret['data']['ip_range_list']
+            dns_servers = [
+                str(ipaddress.ip_interface(ip['address']).ip)
+                for ip in ret['data']['ip_address_list']
+            ]
 
             for device in ret['data']['device_list']:
                 if device['site']['status'].lower() not in [
@@ -245,6 +282,11 @@ class NetboxConnector:
                     'providers': _gen_providers(device),
                     'node_name': device['name'],
                 }
+
+                for service in device['services']:
+                    if service['name'] == 'DHCP':
+                        entry['dhcp_servers'] = _gen_dhcp_ranges(service, dhcp_ranges)
+                        break
 
                 meta = {
                     'netbox': {
@@ -275,6 +317,7 @@ class NetboxConnector:
                         and interface['type'] != "DUMMY"
                     ],
                     'znsl_prefixes': root_prefixes,
+                    'dns_servers': dns_servers,
                 }
                 entry['cvars'] = {k: v for k, v in cvars.items() if v}
                 out[device['name']] = {k: v for k, v in entry.items() if v}
