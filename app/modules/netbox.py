@@ -72,6 +72,10 @@ class NetboxAPI(DjangoAPI):
 
     _ERR_MSG = 'Netbox API returned an error'
 
+    ENDPOINTS = {
+        'interfaces': 'dcim/interfaces',
+    }
+
     def call_script(self, data):
         url = self.url
         logger.debug(f'NetboxAPI.call_script: {url}')
@@ -232,7 +236,11 @@ class NetboxConnector:
             out = []
             for router_ip in router_ips:
 
-                entry = {'network': str(router_ip.network), 'router_ip': str(router_ip.ip), 'ranges': []}
+                entry = {
+                    'network': str(router_ip.network),
+                    'router_ip': str(router_ip.ip),
+                    'ranges': [],
+                }
 
                 for range in dhcp_ranges:
 
@@ -326,8 +334,12 @@ class NetboxConnector:
 
         return out
 
-    def generate_interfaces(self):
-        ret = self.nb_api.gql(netbox.IFACE_GQL)
+    def generate_interfaces(self, in_device=None, in_iface=None):
+
+        if in_device and in_iface:
+            ret = self.nb_api.gql(netbox.ONE_IFACE_GQL % (in_device, in_iface))
+        else:
+            ret = self.nb_api.gql(netbox.IFACE_GQL)
 
         out = {}
 
@@ -656,6 +668,26 @@ class NetboxConnector:
 
         return out
 
+    def set_interface_enabled(self, device, interface, enabled):
+        if not isinstance(enabled, bool):
+            raise NetboxException(code=422, message=f'enabled argument must be boolean')
+
+        data = {'enabled': enabled}
+
+        netbox_interface = (
+            self.nb_api.set('interfaces')
+            .set_params(device=device, name=interface)
+            .get()[0]
+        )
+
+        if netbox_interface['enabled'] == enabled:
+            raise NetboxException(code=200, message=f'Status not changed.')
+
+        self.nb_api.set('interfaces').set_id(netbox_interface['id']).patch(data)
+
+        # Reload netdb entry and return
+        return self.reload_interface(device, interface)
+
     def reload_devices(self):
         data = self.generate_devices()
 
@@ -665,6 +697,14 @@ class NetboxConnector:
         data = self.generate_interfaces()
 
         return netdb.reload(_IFACES_COLUMN, _container(data))
+
+    def reload_interface(self, device, interface):
+        if not (
+            iface_config := self.generate_interfaces(device, interface)
+        ):
+            raise NetboxException(code=404, message=f'Netbox interface not found.')
+
+        return netdb.replace(_IFACES_COLUMN, _container(iface_config))
 
     def reload_igp(self):
         data = self.generate_igp()

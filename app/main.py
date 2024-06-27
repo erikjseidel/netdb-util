@@ -173,6 +173,43 @@ def netbox_reload_interfaces(response: Response):
     )
 
 
+@app.put(
+    NETBOX_CONNECTOR + 'interface/enabled',
+    tags=['netbox_interface'],
+    response_class=PrettyJSONResponse,
+)
+def netbox_update_interface_status(
+    device: str,
+    interface: str,
+    enabled: bool,
+    response: Response,
+):
+    return UtilityAPIReturn(
+        out=NetboxConnector().set_interface_enabled(device, interface, enabled),
+        comment='Status changed',
+    )
+
+
+# Single interface reload
+
+
+class NetboxDeviceInterface(BaseModel):
+    device: str
+    interface: str
+
+
+@app.post(
+    NETBOX_CONNECTOR + 'interface/reload/single',
+    tags=['netbox_interface'],
+    response_class=PrettyJSONResponse,
+)
+def netbox_reload_single_interface(data: NetboxDeviceInterface, response: Response):
+    return UtilityAPIReturn(
+        out=NetboxConnector().reload_interface(data.device, data.interface),
+        comment=f'Netbox interface reloaded for {data.interface} at {data.device}',
+    )
+
+
 #
 # Netbox IGP generation endpoints
 #
