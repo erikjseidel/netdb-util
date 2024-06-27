@@ -658,6 +658,13 @@ class NetboxConnector:
                         neighbor = {
                             'peer_group': peer_group,
                         }
+                        if 'bgp_reject_all' in iface_tags:
+                            neighbor.update(
+                                {
+                                    'reject_in': True,
+                                    'reject_out': True,
+                                }
+                            )
                         neighbors[str(ip['address']).split('/')[0]] = neighbor
 
                 if neighbors:
@@ -699,9 +706,7 @@ class NetboxConnector:
         return netdb.reload(_IFACES_COLUMN, _container(data))
 
     def reload_interface(self, device, interface):
-        if not (
-            iface_config := self.generate_interfaces(device, interface)
-        ):
+        if not (iface_config := self.generate_interfaces(device, interface)):
             raise NetboxException(code=404, message=f'Netbox interface not found.')
 
         return netdb.replace(_IFACES_COLUMN, _container(iface_config))
