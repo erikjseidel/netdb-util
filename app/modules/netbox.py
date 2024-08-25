@@ -378,6 +378,7 @@ class NetboxConnector:
                     'description': interface['description'],
                     'vrf': (interface.get('vrf') or {}).get('name'),
                     'use_dhcp': bool(interface['custom_fields'].get('use_dhcp')),
+                    'ipv6_autoconf': bool(interface['custom_fields'].get('ipv6_autoconf')),
                 }
 
                 if not interface['enabled']:
