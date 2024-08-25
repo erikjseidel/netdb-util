@@ -20,19 +20,6 @@ DEVICE_GQL = """query {
     primary_ip6 {
       address
     }
-    interfaces {
-      name
-      type
-      tags {
-        name
-      }
-    }
-    services {
-      name
-      ipaddresses {
-        address
-      }
-    }
     contacts {
       contact {
         email
@@ -277,7 +264,7 @@ ONE_IFACE_GQL = """query {
   }
 }"""
 
-IGP_GQL = """query {
+PROTOCOL_GQL = """query {
   devices: device_list {
     name
     device_role {
@@ -289,6 +276,25 @@ IGP_GQL = """query {
     passive: interfaces(tag: "igp_passive") {
       name    
     }
+    primary_ip4 {
+      address
+    }
+    primary_ip6 {
+      address
+    }
+    interfaces {
+      name
+      type
+      tags {
+        name
+      }
+    }
+    services {
+      name
+      ipaddresses {
+        address
+      }
+    }
     custom_fields
   }
   contexts: config_context_list(tag: "igp") {
@@ -299,6 +305,10 @@ IGP_GQL = """query {
     roles {
       id
     }
+  }
+  ip_range_list(role: "dhcp-range") {
+    start_address
+    end_address
   }
 }"""
 

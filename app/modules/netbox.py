@@ -9,7 +9,7 @@ from config.secrets import NETBOX_TOKEN, NETBOX_URL, NETBOX_PUBLIC_URL
 
 _DEVICES_COLUMN = 'device'
 _IFACES_COLUMN = 'interface'
-_IGP_COLUMN = 'igp'
+_PROTOCOL_COLUMN = 'protocol'
 _BGP_COLUMN = 'bgp'
 
 NETBOX_HEADERS = {
@@ -227,48 +227,11 @@ class NetboxConnector:
 
             return providers
 
-        def _gen_dhcp_ranges(service, dhcp_ranges):
-
-            router_ips = [
-                ipaddress.ip_interface(ip['address']) for ip in service['ipaddresses']
-            ]
-
-            out = []
-            for router_ip in router_ips:
-
-                entry = {
-                    'network': str(router_ip.network),
-                    'router_ip': str(router_ip.ip),
-                    'ranges': [],
-                }
-
-                for range in dhcp_ranges:
-
-                    start_address = ipaddress.ip_interface(range['start_address'])
-                    end_address = ipaddress.ip_interface(range['end_address'])
-
-                    if (
-                        start_address in router_ip.network
-                        and end_address in router_ip.network
-                    ):
-                        entry['ranges'].append(
-                            {
-                                'start_address': str(start_address.ip),
-                                'end_address': str(end_address.ip),
-                            }
-                        )
-
-                if entry['ranges']:
-                    out.append(entry)
-
-            return out
-
         ret = self.nb_api.gql(netbox.DEVICE_GQL)
         out = {}
 
         if ret['data']:
             root_prefixes = [prefix['prefix'] for prefix in ret['data']['prefix_list']]
-            dhcp_ranges = ret['data']['ip_range_list']
             dns_servers = [
                 str(ipaddress.ip_interface(ip['address']).ip)
                 for ip in ret['data']['ip_address_list']
@@ -291,11 +254,6 @@ class NetboxConnector:
                     'node_name': device['name'],
                 }
 
-                for service in device['services']:
-                    if service['name'] == 'DHCP':
-                        entry['dhcp_servers'] = _gen_dhcp_ranges(service, dhcp_ranges)
-                        break
-
                 meta = {
                     'netbox': {
                         'id': int(device['id']),
@@ -315,15 +273,6 @@ class NetboxConnector:
                     'primary_ipv4': device['primary_ip4']['address'].split('/')[0],
                     'primary_ipv6': device['primary_ip6']['address'].split('/')[0],
                     'primary_contact': device['contacts'][0]['contact']['email'],
-                    'lldp_interfaces': [
-                        interface['name']
-                        for interface in device['interfaces']
-                        if not any(
-                            no_lldp_tags in [tag['name'] for tag in interface['tags']]
-                            for no_lldp_tags in NO_LLDP_IFACE_TAGS
-                        )
-                        and interface['type'] != "DUMMY"
-                    ],
                     'znsl_prefixes': root_prefixes,
                     'dns_servers': dns_servers,
                 }
@@ -378,7 +327,9 @@ class NetboxConnector:
                     'description': interface['description'],
                     'vrf': (interface.get('vrf') or {}).get('name'),
                     'use_dhcp': bool(interface['custom_fields'].get('use_dhcp')),
-                    'ipv6_autoconf': bool(interface['custom_fields'].get('ipv6_autoconf')),
+                    'ipv6_autoconf': bool(
+                        interface['custom_fields'].get('ipv6_autoconf')
+                    ),
                 }
 
                 if not interface['enabled']:
@@ -531,14 +482,51 @@ class NetboxConnector:
 
         return out
 
-    def generate_igp(self):
-        ret = self.nb_api.gql(netbox.IGP_GQL)
+    def generate_protocol(self):
+        ret = self.nb_api.gql(netbox.PROTOCOL_GQL)
 
         out = {}
+
+        def _gen_dhcp_ranges(service, dhcp_ranges):
+
+            router_ips = [
+                ipaddress.ip_interface(ip['address']) for ip in service['ipaddresses']
+            ]
+
+            out = []
+            for router_ip in router_ips:
+
+                entry = {
+                    'network': str(router_ip.network),
+                    'router_ip': str(router_ip.ip),
+                    'ranges': [],
+                }
+
+                for range in dhcp_ranges:
+
+                    start_address = ipaddress.ip_interface(range['start_address'])
+                    end_address = ipaddress.ip_interface(range['end_address'])
+
+                    if (
+                        start_address in router_ip.network
+                        and end_address in router_ip.network
+                    ):
+                        entry['ranges'].append(
+                            {
+                                'start_address': str(start_address.ip),
+                                'end_address': str(end_address.ip),
+                            }
+                        )
+
+                if entry['ranges']:
+                    out.append(entry)
+
+            return out
 
         if ret['data']:
             devices = ret['data'].get('devices')
             contexts = ret['data'].get('contexts')
+            dhcp_ranges = ret['data']['ip_range_list']
 
             for device in devices:
                 name = device['name']
@@ -581,7 +569,28 @@ class NetboxConnector:
                 }
                 entry.update(isis)
 
-                out[name] = {'isis': entry}
+                services = {}
+                for service in device['services']:
+                    if service['name'] == 'DHCP':
+                        services['dhcp_server'] = _gen_dhcp_ranges(service, dhcp_ranges)
+
+                lldp = {
+                    'interfaces': [
+                        interface['name']
+                        for interface in device['interfaces']
+                        if not any(
+                            no_lldp_tags in [tag['name'] for tag in interface['tags']]
+                            for no_lldp_tags in NO_LLDP_IFACE_TAGS
+                        )
+                        and interface['type'] != "DUMMY"
+                    ],
+                }
+
+                out[name] = {
+                    'isis': entry,
+                    'lldp': lldp if lldp else None,
+                    'services': services if services else None,
+                }
         else:
             return None
 
@@ -712,10 +721,10 @@ class NetboxConnector:
 
         return netdb.replace(_IFACES_COLUMN, _container(iface_config))
 
-    def reload_igp(self):
-        data = self.generate_igp()
+    def reload_protocol(self):
+        data = self.generate_protocol()
 
-        return netdb.reload(_IGP_COLUMN, _container(data))
+        return netdb.reload(_PROTOCOL_COLUMN, _container(data))
 
     def reload_ebgp(self):
         data = self.generate_ebgp()

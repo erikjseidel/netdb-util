@@ -20,8 +20,8 @@ tags = [
         "description": " Netbox interface configuration data",
     },
     {
-        "name": "netbox_igp",
-        "description": "Netbox IGP (IS-IS) configuration data",
+        "name": "netbox_protocol",
+        "description": "Netbox Protocol configuration data",
     },
     {
         "name": "netbox_ebgp",

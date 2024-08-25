@@ -211,29 +211,29 @@ def netbox_reload_single_interface(data: NetboxDeviceInterface, response: Respon
 
 
 #
-# Netbox IGP generation endpoints
+# Netbox Protocol generation endpoints
 #
 @app.get(
-    NETBOX_CONNECTOR + 'igp',
-    tags=['netbox_igp'],
+    NETBOX_CONNECTOR + 'protocol',
+    tags=['netbox_protocol'],
     response_class=PrettyJSONResponse,
 )
-def netbox_generate_igp(response: Response):
+def netbox_generate_protocol(response: Response):
     return UtilityAPIReturn(
-        out=NetboxConnector().generate_igp(),
-        comment='IGP configuration generated from Netbox datasource',
+        out=NetboxConnector().generate_protocol(),
+        comment='Protocol configuration generated from Netbox datasource',
     )
 
 
 @app.post(
-    NETBOX_CONNECTOR + 'igp',
-    tags=['netbox_igp'],
+    NETBOX_CONNECTOR + 'protocol',
+    tags=['netbox_protocol'],
     response_class=PrettyJSONResponse,
 )
-def netbox_reload_igp(response: Response):
+def netbox_reload_protocol(response: Response):
     return UtilityAPIReturn(
-        out=NetboxConnector().reload_igp(),
-        comment='IGP configuration reloaded from Netbox datasource',
+        out=NetboxConnector().reload_protocol(),
+        comment='Protocol configuration reloaded from Netbox datasource',
     )
 
 
