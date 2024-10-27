@@ -266,6 +266,7 @@ ONE_IFACE_GQL = """query {
 
 PROTOCOL_GQL = """query {
   devices: device_list {
+    id
     name
     device_role {
       id
@@ -283,18 +284,23 @@ PROTOCOL_GQL = """query {
       address
     }
     interfaces {
+      id
       name
       type
       tags {
         name
       }
+      last_updated
     }
     services {
+      id
       name
       ipaddresses {
         address
       }
+      last_updated
     }
+    last_updated
     custom_fields
   }
   contexts: config_context_list(tag: "igp") {

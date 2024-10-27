@@ -74,6 +74,7 @@ class NetboxAPI(DjangoAPI):
 
     ENDPOINTS = {
         'interfaces': 'dcim/interfaces',
+        'services': 'ipam/services',
     }
 
     def call_script(self, data):
@@ -572,7 +573,18 @@ class NetboxConnector:
                 services = {}
                 for service in device['services']:
                     if service['name'] == 'DHCP':
-                        services['dhcp_server'] = _gen_dhcp_ranges(service, dhcp_ranges)
+                        services['dhcp_server'] = {
+                            'networks': _gen_dhcp_ranges(service, dhcp_ranges),
+                            'meta': {
+                                'netbox': {
+                                    'id': int(service['id']),
+                                    'url': NetboxAPI('ipam/services')
+                                    .set_id(service['id'])
+                                    .get_public_url(),
+                                    'last_updated': service['last_updated'],
+                                }
+                            },
+                        }
 
                 lldp = {
                     'interfaces': [
